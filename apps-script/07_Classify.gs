@@ -18,7 +18,11 @@ var CC_PAYMENT_HINTS = [
   /thank you for your payment/i,
   /payment\s+received\s+towards/i,
   /we have received your payment/i,
-  /bill\s+payment\s+(?:received|successful)/i
+  /bill\s+payment\s+(?:received|was\s+)?(?:successful)/i,
+  // CRED and similar apps: "your credit card bill payment was successful",
+  // "Your credit card payment was successful in 29 seconds".
+  /credit\s+card\s+(?:bill\s+)?payment\s+was\s+successful/i,
+  /payment\s+confirmation/i
 ];
 
 /** Credits that are a merchant returning money for a prior purchase. */

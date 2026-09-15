@@ -16,20 +16,26 @@ rows into a ledger you are going to make spending decisions from.
    |---|---|---|
    | HDFC credit card | `alerts@hdfcbank.bank.in` | `HDFC_CC` |
    | HDFC UPI / savings | `alerts@hdfcbank.bank.in` | `HDFC_UPI` |
-   | SBI credit card | `onlinesbicard@sbicard.com` | `SBI_CC` |
+   | SBI credit card | `onlinesbicard@sbicard.com, from@cred.club` | *(leave blank)* |
+
+   `Sender Rule` takes a comma-separated list. The SBI row carries CRED's sender too, because a
+   CRED bill-payment confirmation is an event on that card. Leave `Parser` blank there so the two
+   senders each get the right parser.
 
    Note that HDFC uses **one sender for all three** of its alert types, so the `Sender Rule` alone
    cannot tell a card alert from a UPI alert. Leave `Parser` blank on the HDFC rows and let the body
    sniffing pick — the `requires` signatures distinguish them reliably. Fill in `Last 4 Digits` for
    each HDFC row from your own card and account numbers, so a message can still be attributed when
    two HDFC accounts both match the sender.
-3. For each sender: three dots → **Filter messages like these** → *Create filter* →
-   **Apply the label: BankAlerts**. Tick *Also apply filter to matching conversations* to backfill.
+3. For each sender — including `from@cred.club` — three dots → **Filter messages like these** →
+   *Create filter* → **Apply the label: BankAlerts**. Tick *Also apply filter to matching
+   conversations* to backfill.
 4. Put the sender into the `Accounts` tab, `Sender Rule` column. The rule is matched as a
    **case-insensitive substring** of the From header, so `alerts@hdfcbank.bank.in` works and so does
    `hdfcbank.bank.in`.
-5. Set `Parser` to `SBI_CC` on the SBI row. Leave it blank on the HDFC rows — one sender covers
-   card, UPI and savings alerts there, so a fixed parser would mis-route two of the three.
+5. Leave `Parser` blank on every row. One HDFC sender covers card, UPI and savings alerts, and the
+   SBI row now covers both SBI Card and CRED — a fixed parser would mis-route the others. Body
+   sniffing picks correctly; set `Parser` only to override a specific misrouting you have observed.
 6. If two accounts share a sender (two HDFC cards, say), fill in `Last 4 Digits` for both.
    Without it the message is reported ambiguous and sent to review rather than guessed onto a card.
 
@@ -61,7 +67,7 @@ against the real workbook. Test emails must never reach the real `Transactions` 
 5. **Finance Sync → Verify workbook schema.** Fix everything it reports before going further —
    either rename the sheet column or edit the `SCHEMA` block in `00_Config.gs` to match reality.
    Optional columns reported as missing are fine to leave alone.
-6. **Finance Sync → Run tests.** 57 assertions, no writes. All should pass.
+6. **Finance Sync → Run tests.** 69 assertions, no writes. All should pass.
 7. **Finance Sync → Dry run — entire label.** Authorise the scopes when prompted (you will see a
    Gmail read-only consent screen; there is no send or delete permission to grant).
 8. Extensions → Apps Script → **Executions** → open the run → read the log.

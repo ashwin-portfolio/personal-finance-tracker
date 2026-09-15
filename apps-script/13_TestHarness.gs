@@ -22,6 +22,7 @@ function runTests() {
   testAmountExtraction_();
   testRealFormats_();
   testRejections_();
+  testCredPayment_();
   testDateParsing_();
   testIdentity_();
   testSignAndExclusion_();
@@ -139,6 +140,62 @@ function testRealFormats_() {
   }
 }
 
+/**
+ * CRED bill-payment confirmations. Redacted: digits, order ID and UTR changed,
+ * shape preserved. The statement amount at the foot of the mail is deliberately
+ * DIFFERENT from the amount paid here — that is the case the anchor exists for.
+ */
+function testCredPayment_() {
+  _t.log.push('CRED credit-card bill payment');
+
+  var body = 'ASHWIN, here is your payment confirmation '
+    + 'Your credit card payment was successful in 29 seconds '
+    + 'SBI \u2022\u2022\u2022\u2022 9999 Download payment details '
+    + 'amount paid Rs.4,840.00 '
+    + 'payment date Sep 04, 2026 '
+    + 'credited to card Sep 04, 2026 '
+    + 'transaction summary Order ID: AAAA1111BB Payment Method: UPI '
+    + 'UTR No.: N0SAMPLE0KQKTBQ2PVVMDVATQJ262470337 '
+    + 'note Your bank will consider Sep 04, 2026 as the payment date. '
+    + 'latest statement detected bill amount 22nd August, 2026 5,200.00';
+
+  var env = { id: 'gmail-cred-1', date: new Date(2026, 8, 5),
+              from: 'CRED <from@cred.club>',
+              subject: 'your credit card bill payment was successful', body: body };
+
+  var r = parseMessage_(env, null);
+  check_('CRED parses', r.ok, r.detail || '');
+  if (!r.ok) return;
+
+  check_('amount comes from "amount paid", not the statement bill amount',
+         r.txn.amount === 4840, String(r.txn.amount));
+  check_('date "Sep 04, 2026" parsed month-first',
+         r.txn.date.getFullYear() === 2026 && r.txn.date.getMonth() === 8 && r.txn.date.getDate() === 4,
+         r.txn.date.toISOString());
+  check_('35-character UTR captured in full',
+         r.txn.reference === 'N0SAMPLE0KQKTBQ2PVVMDVATQJ262470337', r.txn.reference);
+  check_('UTR yields a tier-1 transaction ID',
+         makeTransactionId_('SBI-CC', r.txn, 'gmail-cred-1').tier === 'reference');
+  check_('direction is credit (money arriving at the card)',
+         r.txn.direction === 'credit', r.txn.direction);
+  check_('merchant falls back rather than failing to review',
+         r.txn.merchant === 'Credit Card Bill Payment', r.txn.merchant);
+
+  var cls = classifyTransaction_(r.txn, null, []);
+  check_('classified as CC Payment', cls.type === TXN_TYPE.CC_PAYMENT, cls.type);
+  check_('excluded from spending', cls.excluded === true, String(cls.excluded));
+  check_('not sent to review — the classification is unambiguous',
+         !cls.reviewReason, cls.reviewReason);
+  check_('signed amount is negative on the card side',
+         signedAmount_(r.txn.amount, cls.type) === -4840,
+         String(signedAmount_(r.txn.amount, cls.type)));
+
+  // The mail mentions "latest statement" and rewards; neither may trip a
+  // rejection rule written for bank statement and promo mail.
+  check_('CRED mail is NOT caught by any rejection rule',
+         rejectionReason_(env.subject + ' ' + body) === null,
+         String(rejectionReason_(env.subject + ' ' + body)));
+}
 /**
  * The rejection rules. These matter most: every message below carries an
  * amount and most carry something that looks like a merchant, so without

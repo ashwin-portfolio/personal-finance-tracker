@@ -36,9 +36,20 @@ fixtures in `13_TestHarness.gs` locking each format down.
 | HDFC UPI | `alerts@hdfcbank.bank.in` | `Rs.N is debited ... towards VPA handle@psp (MERCHANT) on DD-MM-YY` + `UPI transaction reference no.: N` |
 | HDFC savings credit | `alerts@hdfcbank.bank.in` | `Rs.N has been successfully credited ... Date: DD-MM-YY` — no merchant in the mail |
 | SBI Card | `onlinesbicard@sbicard.com` | `Rs.N spent on your SBI Credit Card ending NNNN at MERCHANT on DD/MM/YY` |
+| CRED bill payment | `from@cred.club` | HTML table: `amount paid  Rs.N` / `payment date  Mon DD, YYYY` / `UTR No.: ...` |
 
-Only HDFC UPI carries a bank reference number, so it is the only source that reaches tier-1
-identity. HDFC CC and SBI CC fall to the Gmail message ID (tier 2).
+HDFC UPI and CRED carry a reference number, so those reach tier-1 identity. HDFC CC and SBI CC
+carry none and fall to the Gmail message ID (tier 2).
+
+CRED needs three things the bank parsers do not:
+
+- The amount anchors on **`amount paid`**. The same mail also prints the statement bill amount
+  further down under `latest statement`, and the two are equal only when you pay the bill in full.
+- The date is **month-first** (`Sep 04, 2026`). No bank alert here writes dates that way.
+- The UTR is **35 alphanumeric characters**, past the 25-char cap the generic reference patterns use.
+
+A CRED confirmation is classified `CC Payment` and excluded from spending on the card side, per
+Orig §10 — paying a bill is not income and not negative spending.
 
 ### Rejection is load-bearing, not an optimisation
 
@@ -58,13 +69,41 @@ and marketing mail before parser selection. Dropped mail is logged and discarded
 The EMI promos also forced a change to the amount guard: HDFC writes both `Outstanding of Rs. 30682`
 and `Rs.30682 Outstanding Amount`, so poison words are now checked on **both** sides of a candidate.
 
+### Accounts may list several senders
+
+One card is alerted by its own bank **and** by whatever app you pay the bill through. `Sender Rule`
+therefore accepts a comma-separated list, and all of them resolve to the same account:
+
+```
+Account ID  SBI-CC
+Sender Rule onlinesbicard@sbicard.com, from@cred.club
+```
+
+If CRED later pays a second card too, both accounts match the CRED sender and `Last 4 Digits`
+disambiguates — the same mechanism that already separates two cards at one bank.
+
 ### Still unhandled
 
-- **CRED** sends the SBI card bill payment confirmations (`your credit card bill payment was
-  successful`, `₹N,NNN.00` to `SBI •••• 9999`) from its own sender. No parser covers it, so SBI card
-  repayments will not be recognised as `CC Payment` until one is added.
-- **SBI savings/debit** transaction alerts do not appear to arrive by email at all — only marketing
-  and monthly statements. If you want those in the ledger they will have to come from somewhere else.
+Formats seen in the mailbox that no parser covers yet. Each currently lands in the Review Queue
+as `Unsupported Bank/Format` rather than being guessed at:
+
+- **HDFC debit card** — `Thank you for using your HDFC Bank Debit Card ending NNNN for Rs N at
+  MERCHANT on DD-MM-YYYY`. A third HDFC shape, distinct from both the credit-card and UPI ones.
+- **HDFC savings credit, "by VPA" variant** — `Rs. N is successfully credited to your account
+  **NNNN by VPA handle@psp SENDER NAME on ...`, alongside the `credited to your HDFC Bank account
+  ending in` form the `HDFC_SAV_CREDIT` parser handles.
+- **SBI savings / debit alerts** do not appear to arrive by email at all — only marketing and
+  monthly statements.
+
+### One thing to watch on the funding side
+
+A CRED payment moves money out of a bank account and into a card. This project books the card side
+from the CRED mail. If the funding account also emails an alert for that outgoing payment, it would
+be counted as spending, double-counting the bill.
+
+No such alert was found for the observed payment, so nothing is done about it today. If one does
+show up, add the CRED collection handle to `Self Transfer VPAs` in Settings — that excludes the
+funding leg without touching the card leg.
 
 ## Read this before your first run
 
@@ -95,7 +134,7 @@ apps-script/
   10_Pipeline.gs      orchestration + entry points + failure isolation
   11_Triggers.gs      trigger install/remove, duplicate-safe
   12_AuditLog.gs      deliberate correction workflow
-  13_TestHarness.gs   57 offline tests incl. real-format fixtures + previewParse()
+  13_TestHarness.gs   69 offline tests incl. real-format fixtures + previewParse()
   99_Menu.gs          the Finance Sync menu
   Sidebar.html        correction UI
 docs/
@@ -122,9 +161,9 @@ scripts/
 
 ## Testing
 
-`runTests()` (Finance Sync → Run tests) runs 57 offline assertions against the pure logic,
+`runTests()` (Finance Sync → Run tests) runs 69 offline assertions against the pure logic,
 including end-to-end parses of every real alert format and every rejection case. It touches no tab
-and needs no Gmail access, so it is safe in the real workbook. All 57 pass as shipped.
+and needs no Gmail access, so it is safe in the real workbook. All 69 pass as shipped.
 
 Mapping to the PRP §6 acceptance tests:
 

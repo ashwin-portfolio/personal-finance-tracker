@@ -33,10 +33,16 @@ function accounts_() {
       var a = rows[i][cActive];
       if (a !== '' && a !== null && !(a === true || /^(true|yes|y|1)$/i.test(String(a).trim()))) continue;
     }
+    // Sender Rule accepts several senders, comma- or semicolon-separated: one
+    // card is alerted by its own bank AND by whatever app you pay the bill
+    // through (CRED, for instance). Both belong to the same account.
+    var rules = String(rows[i][cRule]).toLowerCase().split(/[,;]/)
+                  .map(function (r) { return r.trim(); })
+                  .filter(function (r) { return r.length > 0; });
     out.push({
       id:     id,
       bank:   cBank   >= 0 ? String(rows[i][cBank]).trim()   : '',
-      rule:   String(rows[i][cRule]).trim().toLowerCase(),
+      rules:  rules,
       last4:  cLast4  >= 0 ? String(rows[i][cLast4]).trim()  : '',
       parser: cParser >= 0 ? String(rows[i][cParser]).trim() : ''
     });
@@ -55,7 +61,10 @@ function accounts_() {
 function matchAccount_(fromHeader, body) {
   var from = String(fromHeader).toLowerCase();
   var candidates = accounts_().filter(function (a) {
-    return a.rule && from.indexOf(a.rule) !== -1;
+    for (var i = 0; i < a.rules.length; i++) {
+      if (from.indexOf(a.rules[i]) !== -1) return true;
+    }
+    return false;
   });
 
   if (candidates.length === 0) return { account: null, ambiguous: false };

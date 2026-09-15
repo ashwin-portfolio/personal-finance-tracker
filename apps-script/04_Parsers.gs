@@ -24,6 +24,52 @@
 
 var PATTERNS = {
   /**
+   * CRED credit-card bill payment confirmation. Real shape (an HTML table, so
+   * the label and its value are separated only by whitespace once flattened):
+   *   "Your credit card payment was successful in 29 seconds
+   *    SBI  ****  9999
+   *    payment details
+   *    amount paid     Rs.N,NNN.00
+   *    payment date    Sep 04, 2026
+   *    Order ID:       XXXXXXXXXX
+   *    UTR No.:        N0SAMPLE0KQ...  (35 chars)"
+   *
+   * Three things make this parser different from the bank ones:
+   *
+   * 1. The amount MUST anchor on "amount paid". The same mail also prints the
+   *    statement bill amount lower down under "latest statement", and the two
+   *    are equal only when you pay the full bill.
+   * 2. The date is "Sep 04, 2026" — month first, unlike every bank alert here.
+   * 3. The UTR is 35 alphanumeric characters, well past the 25-char cap the
+   *    generic reference patterns use. It is worth capturing: it is the only
+   *    thing giving these mails tier-1 identity.
+   *
+   * Listed first so a CRED mail paying an HDFC card cannot be claimed by the
+   * HDFC parsers on the strength of the bank name appearing in the body.
+   */
+  CRED_PAYMENT: {
+    parser: 'CRED_PAYMENT',
+    bank: 'CRED',
+    requires: [/cred\.club/i, /payment\s+(?:was\s+)?successful|payment\s+confirmation/i],
+    merchantOptional: true,
+    merchantFallback: 'Credit Card Bill Payment',
+    forceDirection: 'credit',
+    amount: [
+      /amount\s*paid\s*[:\s]*(?:rs\.?|inr)?\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)/i
+    ],
+    merchant: [],
+    date: [
+      /payment\s*date\s*[:\s]*([A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4})/i,
+      /credited\s*to\s*card\s*[:\s]*([A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4})/i
+    ],
+    reference: [
+      /UTR\s*No\.?\s*[:\s]*([A-Za-z0-9]{12,40})/i,
+      /Order\s*ID\s*[:\s]*([A-Za-z0-9]{6,30})/i
+    ],
+    creditHints: [/payment\s+(?:was\s+)?successful/i]
+  },
+
+  /**
    * HDFC credit card purchase. Real shape:
    *   "We would like to inform you that Rs. 450.00 has been debited from your
    *    HDFC Bank Credit Card ending 9999 towards SAMPLE TRADERS on
@@ -232,6 +278,20 @@ function parseDateToken_(token, fallbackDate) {
   }
 
   // "05-Sep-2025", "05 Sep 2025", "14 Sep, 2026", "14 September, 2026"
+  // Month-first: "Sep 04, 2026" / "September 04 2026". CRED writes dates this
+  // way; no bank alert in this mailbox does.
+  var mf = s.match(/^([A-Za-z]{3})[A-Za-z]*\s+(\d{1,2}),?\s+(\d{2,4})$/);
+  if (mf) {
+    var mfm = MONTHS[mf[1].toLowerCase()];
+    if (mfm === undefined) return fallbackDate;
+    var mfy = Number(mf[3]);
+    if (mfy < 100) mfy += 2000;
+    var mfd = Number(mf[2]);
+    var mfdt = new Date(mfy, mfm, mfd);
+    if (isNaN(mfdt.getTime()) || mfdt.getDate() !== mfd) return fallbackDate;
+    return mfdt;
+  }
+
   m = s.match(/^(\d{1,2})[-\s]+([A-Za-z]{3})[A-Za-z]*,?[-\s]+(\d{2,4})$/);
   if (m) {
     var mm = MONTHS[m[2].toLowerCase()];
@@ -336,6 +396,13 @@ function parseMessage_(env, account) {
   var vpa = spec.vpa ? firstMatch_(body, spec.vpa) : null;
 
   var isCredit = false;
+  if (spec.forceDirection) {
+    // Some sources are unambiguous by construction: a CRED confirmation is
+    // always money arriving at the card. Sniffing verbs there only adds ways
+    // to be wrong.
+    isCredit = (spec.forceDirection === 'credit');
+    return finaliseTxn_(spec, amt, merchant, body, env, isCredit);
+  }
   for (var i = 0; i < spec.creditHints.length; i++) {
     if (spec.creditHints[i].test(body)) { isCredit = true; break; }
   }
@@ -346,6 +413,12 @@ function parseMessage_(env, account) {
     isCredit = false;
   }
 
+  return finaliseTxn_(spec, amt, merchant, body, env, isCredit);
+}
+
+/** Builds the successful parse result. Shared by the normal and forced paths. */
+function finaliseTxn_(spec, amt, merchant, body, env, isCredit) {
+  var dateTok = firstMatch_(body, spec.date);
   return {
     ok: true,
     txn: {
@@ -354,9 +427,9 @@ function parseMessage_(env, account) {
       amount: amt.amount,
       direction: isCredit ? 'credit' : 'debit',
       merchant: merchant,
-      vpa: vpa || '',
-      date: when,
-      reference: ref || '',
+      vpa: spec.vpa ? (firstMatch_(body, spec.vpa) || '') : '',
+      date: parseDateToken_(dateTok, env.date),
+      reference: firstMatch_(body, spec.reference) || '',
       rawAmount: amt.raw,
       raw: body.slice(0, 1500)
     }
