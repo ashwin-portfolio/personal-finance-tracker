@@ -18,6 +18,7 @@ function newRunStats_(triggerType) {
     duplicates: 0,
     review: 0,
     errors: 0,
+    ignored: 0,
     status: 'Running',
     errorMessage: ''
   };
@@ -37,7 +38,8 @@ function writeSyncLog_(stats, dryRun) {
     'Sent To Review':     stats.review,
     'Parsing Errors':     stats.errors,
     'Status':             stats.status,
-    'Error Message':      String(stats.errorMessage || '').slice(0, 1000)
+    'Error Message':      String(stats.errorMessage || '').slice(0, 1000),
+    'Ignored':            stats.ignored
   };
 
   if (dryRun) {
@@ -62,5 +64,6 @@ function summarise_(stats) {
        + ', imported ' + stats.imported
        + ', duplicates ' + stats.duplicates
        + ', to review ' + stats.review
-       + ', errors ' + stats.errors;
+       + ', errors ' + stats.errors
+       + ', ignored ' + stats.ignored;
 }

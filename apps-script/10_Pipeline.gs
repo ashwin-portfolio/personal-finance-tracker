@@ -147,6 +147,13 @@ function processMessage_(env, idx, c, selfVpas, flagUncategorised, toInsert, toR
 
   // ---- 2. Parse -------------------------------------------------------------
   var parsed = parseMessage_(env, account);
+  if (!parsed.ok && parsed.drop) {
+    // A known non-transaction: OTP, declined alert, EMI promo, statement.
+    // Queueing these would bury the real review items in noise.
+    stats.ignored++;
+    Logger.log('  - ignored: ' + parsed.detail + ' [' + env.subject + ']');
+    return;
+  }
   if (!parsed.ok) {
     stats.errors++;
     pushReview_(toReview, idx, {

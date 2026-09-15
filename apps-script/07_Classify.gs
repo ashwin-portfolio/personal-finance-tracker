@@ -52,7 +52,10 @@ function classifyTransaction_(txn, account, selfTransferVpas) {
 
   // Self-transfer is checked first: it outranks direction entirely, because the
   // same movement produces a debit alert on one account and a credit on the other.
-  if (matchesAny_(text, SELF_TRANSFER_HINTS) || isKnownSelfVpa_(txn.merchant, selfTransferVpas)) {
+  // Check the VPA handle as well as the display name: a transfer to your own
+  // account shows the handle reliably, the name inconsistently.
+  var selfIdentity = (txn.merchant || '') + ' ' + (txn.vpa || '');
+  if (matchesAny_(text, SELF_TRANSFER_HINTS) || isKnownSelfVpa_(selfIdentity, selfTransferVpas)) {
     return {
       type: TXN_TYPE.SELF_TRANSFER,
       excluded: true,

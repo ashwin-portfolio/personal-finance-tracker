@@ -10,20 +10,34 @@ rows into a ledger you are going to make spending decisions from.
 1. Gmail → Settings → Labels → **Create new label**: `BankAlerts`.
    (If you pick a different name, set `Gmail Label` in the Settings tab to match. A name with a
    space becomes a hyphen in Gmail search; the code handles that.)
-2. Find one real alert from each bank and note the **exact** sender address — open the message,
-   click the three dots → *Show original*, and read the `From:` header. The placeholder senders
-   currently sitting in the `Accounts` tab are unverified guesses and will match nothing.
+2. The real senders are already known — they were read from the mailbox, not guessed:
+
+   | Account | Sender Rule | Parser |
+   |---|---|---|
+   | HDFC credit card | `alerts@hdfcbank.bank.in` | `HDFC_CC` |
+   | HDFC UPI / savings | `alerts@hdfcbank.bank.in` | `HDFC_UPI` |
+   | SBI credit card | `onlinesbicard@sbicard.com` | `SBI_CC` |
+
+   Note that HDFC uses **one sender for all three** of its alert types, so the `Sender Rule` alone
+   cannot tell a card alert from a UPI alert. Leave `Parser` blank on the HDFC rows and let the body
+   sniffing pick — the `requires` signatures distinguish them reliably. Fill in `Last 4 Digits` for
+   each HDFC row from your own card and account numbers, so a message can still be attributed when
+   two HDFC accounts both match the sender.
 3. For each sender: three dots → **Filter messages like these** → *Create filter* →
    **Apply the label: BankAlerts**. Tick *Also apply filter to matching conversations* to backfill.
-4. Put the real sender into the `Accounts` tab, `Sender Rule` column. The rule is matched as a
-   **case-insensitive substring** of the From header, so `alerts@hdfcbank.net` works and so does
-   `hdfcbank.net`.
-5. Fill in `Parser` on each Accounts row with one of `HDFC_CC`, `HDFC_UPI`, `SBI_CC`. This is
-   optional — the code sniffs the body otherwise — but an explicit value is more reliable.
+4. Put the sender into the `Accounts` tab, `Sender Rule` column. The rule is matched as a
+   **case-insensitive substring** of the From header, so `alerts@hdfcbank.bank.in` works and so does
+   `hdfcbank.bank.in`.
+5. Set `Parser` to `SBI_CC` on the SBI row. Leave it blank on the HDFC rows — one sender covers
+   card, UPI and savings alerts there, so a fixed parser would mis-route two of the three.
 6. If two accounts share a sender (two HDFC cards, say), fill in `Last 4 Digits` for both.
    Without it the message is reported ambiguous and sent to review rather than guessed onto a card.
 
 **Gate:** several real HDFC, UPI and SBI emails visible under the label.
+
+**Do not filter on subject.** The label must catch the OTP, declined and promo mail too — the parser
+drops those deliberately (`REJECT_SIGNATURES`), and it is better to see them dropped in the dry-run
+log than to discover later that a filter was silently hiding a format you needed.
 
 ---
 
@@ -47,7 +61,7 @@ against the real workbook. Test emails must never reach the real `Transactions` 
 5. **Finance Sync → Verify workbook schema.** Fix everything it reports before going further —
    either rename the sheet column or edit the `SCHEMA` block in `00_Config.gs` to match reality.
    Optional columns reported as missing are fine to leave alone.
-6. **Finance Sync → Run tests.** 34 assertions, no writes. All should pass.
+6. **Finance Sync → Run tests.** 57 assertions, no writes. All should pass.
 7. **Finance Sync → Dry run — entire label.** Authorise the scopes when prompted (you will see a
    Gmail read-only consent screen; there is no send or delete permission to grant).
 8. Extensions → Apps Script → **Executions** → open the run → read the log.

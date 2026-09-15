@@ -15,7 +15,7 @@ It does not touch the Dashboard, Budget, or Safe-to-Spend layer — those are al
 | 1 | Gmail label + filters | **You do this in the browser.** See [docs/DEPLOY.md](docs/DEPLOY.md). |
 | 2 | Duplicate the workbook for dev | **You do this.** Non-negotiable — nothing here should first run against the real ledger. |
 | 3 | Apps Script project, dry-run only | Built — `runDryRun()` / `runFullDryRun()`. Writes to no tab at all. |
-| 4 | Parsers, HDFC → UPI → SBI | **Drafts only, blocked on real sample emails.** See below. |
+| 4 | Parsers, HDFC → UPI → SBI | Validated against real alert mail (Sep 2026) and covered by fixtures. Not yet confirmed by a live dry run. |
 | 5 | Transaction ID + deduplication | Built and unit-tested — `05_Dedup.gs`. |
 | 6 | Categorisation | Built and unit-tested — `06_Categorize.gs`. |
 | 7 | Manual "Run Sync Now" | Built — Finance Sync menu, with a confirm dialog. |
@@ -25,16 +25,46 @@ It does not touch the Dashboard, Budget, or Safe-to-Spend layer — those are al
 | 11 | Refunds / CC payments / Self-Transfer | Built and unit-tested — `07_Classify.gs`. Needs real history to validate. |
 | 12 | Audit Log | Built — deliberate sidebar workflow, not an `onEdit` guess. |
 
-## Step 4 is the only real blocker
+## Parser status
 
-The patterns in `04_Parsers.gs` are **hypotheses, not validated parsers**:
+Patterns are written against real alert mail observed in the mailbox (Sep 2026), with redacted
+fixtures in `13_TestHarness.gs` locking each format down.
 
-- **HDFC CC / HDFC UPI** — shaped after `passbook` (MIT) and the common structure of Indian bank alert mail.
-- **SBI CC** — entirely net-new. Neither source repo had a reference implementation, so these are the weakest patterns in the file.
+| Source | Sender | Shape |
+|---|---|---|
+| HDFC credit card | `alerts@hdfcbank.bank.in` | `Rs. N has been debited ... towards MERCHANT on DD Mon, YYYY at HH:MM:SS` |
+| HDFC UPI | `alerts@hdfcbank.bank.in` | `Rs.N is debited ... towards VPA handle@psp (MERCHANT) on DD-MM-YY` + `UPI transaction reference no.: N` |
+| HDFC savings credit | `alerts@hdfcbank.bank.in` | `Rs.N has been successfully credited ... Date: DD-MM-YY` — no merchant in the mail |
+| SBI Card | `onlinesbicard@sbicard.com` | `Rs.N spent on your SBI Credit Card ending NNNN at MERCHANT on DD/MM/YY` |
 
-To finish Step 4, hand over redacted real emails using the format in
-[docs/SAMPLE-EMAILS.md](docs/SAMPLE-EMAILS.md). Everything that needs to change lives in the
-`PATTERNS` block at the top of `04_Parsers.gs`; the extraction engine below it is bank-agnostic.
+Only HDFC UPI carries a bank reference number, so it is the only source that reaches tier-1
+identity. HDFC CC and SBI CC fall to the Gmail message ID (tier 2).
+
+### Rejection is load-bearing, not an optimisation
+
+A bank's transaction alert, its OTP mail, and its declined-transaction notice all carry an amount,
+a merchant and a card number, and all arrive from the same sender. Matching on "has an amount and a
+merchant" books all three. Two cases observed directly in this mailbox:
+
+- An **OTP** mail for `INR 3798.00 at SAMPLE MERCH` arrives minutes before the genuine SAMPLE MERCH alert
+  for the same 3798.00. Parsing both doubles the spend.
+- A **declined** `Rs. 9390.00` alert sits alongside a **successful** `Rs. 9390.00` retry on the same
+  card the same day. Parsing both doubles the spend.
+
+`REJECT_SIGNATURES` in `04_Parsers.gs` drops OTP, declined, EMI promo, statement, rewards, card-control
+and marketing mail before parser selection. Dropped mail is logged and discarded rather than queued
+— a promo is not something a human needs to adjudicate.
+
+The EMI promos also forced a change to the amount guard: HDFC writes both `Outstanding of Rs. 30682`
+and `Rs.30682 Outstanding Amount`, so poison words are now checked on **both** sides of a candidate.
+
+### Still unhandled
+
+- **CRED** sends the SBI card bill payment confirmations (`your credit card bill payment was
+  successful`, `₹N,NNN.00` to `SBI •••• 9999`) from its own sender. No parser covers it, so SBI card
+  repayments will not be recognised as `CC Payment` until one is added.
+- **SBI savings/debit** transaction alerts do not appear to arrive by email at all — only marketing
+  and monthly statements. If you want those in the ledger they will have to come from somewhere else.
 
 ## Read this before your first run
 
@@ -65,7 +95,7 @@ apps-script/
   10_Pipeline.gs      orchestration + entry points + failure isolation
   11_Triggers.gs      trigger install/remove, duplicate-safe
   12_AuditLog.gs      deliberate correction workflow
-  13_TestHarness.gs   34 offline tests + previewParse() for Step 4 iteration
+  13_TestHarness.gs   57 offline tests incl. real-format fixtures + previewParse()
   99_Menu.gs          the Finance Sync menu
   Sidebar.html        correction UI
 docs/
@@ -92,8 +122,9 @@ scripts/
 
 ## Testing
 
-`runTests()` (Finance Sync → Run tests) runs 34 offline assertions against the pure logic. It
-touches no tab and needs no Gmail access, so it is safe in the real workbook. All 34 pass as shipped.
+`runTests()` (Finance Sync → Run tests) runs 57 offline assertions against the pure logic,
+including end-to-end parses of every real alert format and every rejection case. It touches no tab
+and needs no Gmail access, so it is safe in the real workbook. All 57 pass as shipped.
 
 Mapping to the PRP §6 acceptance tests:
 

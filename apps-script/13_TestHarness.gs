@@ -20,6 +20,8 @@ function runTests() {
   _t = { pass: 0, fail: 0, log: [] };
 
   testAmountExtraction_();
+  testRealFormats_();
+  testRejections_();
   testDateParsing_();
   testIdentity_();
   testSignAndExclusion_();
@@ -37,29 +39,148 @@ function runTests() {
 function testAmountExtraction_() {
   _t.log.push('Amount extraction (must never pick up a limit or balance)');
 
-  var spec = PATTERNS.HDFC_CC;
+  var hdfc = PATTERNS.HDFC_CC;
+  var sbi  = PATTERNS.SBI_CC;
 
-  var a = parseAmount_('Rs 1,234.50 at BIGBAZAAR on 12-09-2025', spec.amount);
-  check_('comma-separated amount', a && a.amount === 1234.5, a ? String(a.amount) : 'no match');
+  var a = parseAmount_('Rs. 1,234.50 has been debited from your HDFC Bank Credit Card', hdfc.amount);
+  check_('HDFC: comma-separated amount', a && a.amount === 1234.5, a ? String(a.amount) : 'no match');
 
-  var b = parseAmount_('INR 499 at ZOMATO on 12-09-2025', spec.amount);
-  check_('INR prefix, no decimals', b && b.amount === 499, b ? String(b.amount) : 'no match');
+  var b = parseAmount_('Rs.499 spent on your SBI Credit Card ending 9999', sbi.amount);
+  check_('SBI: no decimals', b && b.amount === 499, b ? String(b.amount) : 'no match');
 
-  var c = parseAmount_(
-    'Thank you for using your card for Rs 250.00 at CAFE on 12-09-2025. Available credit limit is Rs 1,50,000.00',
-    spec.amount);
-  check_('transaction wins over available limit', c && c.amount === 250, c ? String(c.amount) : 'no match');
+  // The real HDFC EMI promo puts the poison word AFTER the amount, which a
+  // left-context-only guard misses.
+  var c = parseAmount_('Rs.30682 Outstanding Amount 0.99% pm ROI', hdfc.amount);
+  check_('poison word to the RIGHT of the amount is caught', c === null, c ? String(c.amount) : '');
 
-  var d = parseAmount_('Your available balance is Rs 45,000.00', spec.amount);
-  check_('balance-only text yields nothing', d === null, d ? String(d.amount) : '');
+  var d = parseAmount_('Outstanding of Rs. 30682 as on 10 Sep 2026 is eligible', hdfc.amount);
+  check_('poison word to the LEFT of the amount is caught', d === null, d ? String(d.amount) : '');
 
-  var e = parseAmount_('Rs 0.00 at TEST on 12-09-2025', spec.amount);
+  var e = parseAmount_('Rs. 0.00 has been debited from your HDFC Bank Credit Card', hdfc.amount);
   check_('zero amount rejected', e === null, e ? String(e.amount) : '');
 
-  var f = parseAmount_('Rs 99,99,99,999.00 at TEST on 12-09-2025', spec.amount);
+  var f = parseAmount_('Rs. 99,99,99,999.00 has been debited from your HDFC Bank Credit Card', hdfc.amount);
   check_('implausibly large amount rejected', f === null, f ? String(f.amount) : '');
 }
 
+/**
+ * End-to-end parses of the REAL alert formats, redacted: digits changed and
+ * merchants genericised, shape preserved exactly as observed Sep 2026.
+ */
+function testRealFormats_() {
+  _t.log.push('Real alert formats (redacted samples)');
+
+  function parse(from, subject, body) {
+    return parseMessage_({ id: 'x', date: new Date(2026, 0, 1), from: from, subject: subject, body: body }, null);
+  }
+
+  // --- HDFC credit card purchase ---
+  var hdfcCC = parse(
+    'HDFC Bank InstaAlerts <alerts@hdfcbank.bank.in>',
+    'A payment was made using your Credit Card',
+    'Dear Customer, Greetings from HDFC Bank. We would like to inform you that Rs. 450.00 has been debited '
+    + 'from your HDFC Bank Credit Card ending 9999 towards SAMPLE TRADERS on 14 Sep, 2026 at 18:22:07. '
+    + 'Call HDFC Bank Helpline at 1800 258 6161. From your registered mobile number, type BLOCK CC 9999');
+  check_('HDFC CC parses', hdfcCC.ok, hdfcCC.detail || '');
+  if (hdfcCC.ok) {
+    check_('HDFC CC amount', hdfcCC.txn.amount === 450, String(hdfcCC.txn.amount));
+    check_('HDFC CC merchant comes from "towards", not the helpline number',
+           hdfcCC.txn.merchant === 'SAMPLE TRADERS', hdfcCC.txn.merchant);
+    check_('HDFC CC date "14 Sep, 2026"',
+           hdfcCC.txn.date.getFullYear() === 2026 && hdfcCC.txn.date.getMonth() === 8 && hdfcCC.txn.date.getDate() === 14,
+           hdfcCC.txn.date.toISOString());
+    check_('HDFC CC direction', hdfcCC.txn.direction === 'debit', hdfcCC.txn.direction);
+  }
+
+  // --- HDFC UPI ---
+  var upi = parse(
+    'HDFC Bank InstaAlerts <alerts@hdfcbank.bank.in>',
+    'You have done a UPI txn. Check details!',
+    'Dear Customer, Greetings from HDFC Bank! Rs.130.00 is debited from your account ending 1111 '
+    + 'towards VPA sample.abc123@pty (SAMPLE SNACK BAR) on 15-09-26. '
+    + 'UPI transaction reference no.: 120000000001. If you did not authorise');
+  check_('HDFC UPI parses', upi.ok, upi.detail || '');
+  if (upi.ok) {
+    check_('UPI amount', upi.txn.amount === 130, String(upi.txn.amount));
+    check_('UPI merchant is the parenthesised name, not the handle',
+           upi.txn.merchant === 'SAMPLE SNACK BAR', upi.txn.merchant);
+    check_('UPI keeps the VPA for self-transfer checks',
+           upi.txn.vpa === 'sample.abc123@pty', upi.txn.vpa);
+    check_('UPI reference from "UPI transaction reference no.:"',
+           upi.txn.reference === '120000000001', upi.txn.reference);
+    check_('UPI reference yields a tier-1 transaction ID',
+           makeTransactionId_('UPI-SAV', upi.txn, 'gmail-1').tier === 'reference');
+  }
+
+  // --- SBI Card ---
+  var sbi = parse(
+    'SBI Card Transaction Alert <onlinesbicard@sbicard.com>',
+    'Transaction Alert from BPCL SBI Card',
+    'Dear Cardholder, This is to inform you that, Rs.1,207.58 spent on your SBI Credit Card ending 9999 '
+    + 'at SAMPLEPETROLSUPPLY on 10/09/26. Trxn. not done by you? Report at https://sbicard.com/Dispute');
+  check_('SBI CC parses', sbi.ok, sbi.detail || '');
+  if (sbi.ok) {
+    check_('SBI amount', sbi.txn.amount === 1207.58, String(sbi.txn.amount));
+    check_('SBI merchant', sbi.txn.merchant === 'SAMPLEPETROLSUPPLY', sbi.txn.merchant);
+    check_('SBI date 10/09/26',
+           sbi.txn.date.getMonth() === 8 && sbi.txn.date.getDate() === 10, sbi.txn.date.toISOString());
+  }
+
+  // --- HDFC savings credit: no merchant anywhere in the mail ---
+  var sav = parse(
+    'HDFC Bank InstaAlerts <alerts@hdfcbank.bank.in>',
+    'View: Account update for your HDFC Bank A/c',
+    'Dear Customer, Greetings from HDFC Bank! We are writing to inform you that Rs.4000.00 has been '
+    + 'successfully credited to your HDFC Bank account ending in 1111. Transaction Details: a. Date: 14-09-26');
+  check_('HDFC savings credit parses without a merchant', sav.ok, sav.detail || '');
+  if (sav.ok) {
+    check_('savings credit amount', sav.txn.amount === 4000, String(sav.txn.amount));
+    check_('savings credit direction', sav.txn.direction === 'credit', sav.txn.direction);
+  }
+}
+
+/**
+ * The rejection rules. These matter most: every message below carries an
+ * amount and most carry something that looks like a merchant, so without
+ * rejection they become phantom ledger rows.
+ */
+function testRejections_() {
+  _t.log.push('Non-transaction mail must be dropped, not booked');
+
+  function parse(subject, body) {
+    return parseMessage_({ id: 'x', date: new Date(2026, 0, 1),
+                           from: 'alerts@hdfcbank.bank.in', subject: subject, body: body }, null);
+  }
+
+  // The real killer: an OTP mail naming an amount AND a merchant, arriving
+  // minutes before the genuine alert for the very same purchase.
+  var otp = parse('OTP For online Ecom Transaction',
+    'Dear Customer, Greetings from HDFC Bank! 606464 is the OTP for the transaction of INR 3798.00 '
+    + 'at SAMPLE COMME initiated using your HDFC Bank Card ending 9999. This OTP is valid for 09:40.');
+  check_('OTP mail dropped (else it duplicates the real purchase)',
+         !otp.ok && otp.drop === true, JSON.stringify(otp.detail || otp));
+
+  // Equally real: a declined 9390 sits alongside a successful 9390 retry.
+  var declined = parse('Declined Transaction: Usage Limit Exceeded on Your HDFC Bank Card',
+    'We regret to inform you that the transaction of Rs. 9390.00 on your HDFC Bank Credit Card '
+    + 'ending with 9999 has declined. Reason: Your Domestic Contactless usage limit is set lower');
+  check_('declined transaction dropped', !declined.ok && declined.drop === true,
+         JSON.stringify(declined.detail || declined));
+
+  var emi = parse('Credit Card xx9999 Update: SmartEMI is now available for you',
+    'Outstanding of Rs. 30682 as on 10 Sep 2026 is eligible for conversion. Convert your balance to SmartEMI');
+  check_('EMI promo dropped', !emi.ok && emi.drop === true, JSON.stringify(emi.detail || emi));
+
+  var stmt = parse('Your SBI Card BPCL Monthly Statement -Aug 2026',
+    'Attached herewith is the monthly statement of your SBI Credit Card ending with XXXX XX99.');
+  check_('statement mail dropped', !stmt.ok && stmt.drop === true, JSON.stringify(stmt.detail || stmt));
+
+  // And a genuine alert must NOT be caught by any rejection rule.
+  var real = parse('A payment was made using your Credit Card',
+    'We would like to inform you that Rs. 450.00 has been debited from your HDFC Bank Credit Card '
+    + 'ending 9999 towards SAMPLE TRADERS on 14 Sep, 2026 at 18:22:07.');
+  check_('a genuine alert is NOT rejected', real.ok === true, JSON.stringify(real.detail || ''));
+}
 function testDateParsing_() {
   _t.log.push('Date parsing (day-first, as Indian banks write it)');
   var fb = new Date(2000, 0, 1);
