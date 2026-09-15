@@ -104,3 +104,19 @@ To run the tests outside Google (syntax check + full suite under Node):
 ```bash
 node scripts/run-tests.js apps-script
 ```
+
+## Licence and attribution
+
+This project is MIT licensed — see [LICENSE](LICENSE).
+
+**Third-party work this draws on:**
+
+- **passbook** (MIT) — the HDFC credit-card and UPI patterns in
+  `04_Parsers.gs` are shaped after its parsers. MIT permits this; if you copy its parser source
+  verbatim rather than adapting the shape, preserve its copyright notice alongside this one.
+- **Ledger / vickeyshetty** — **no licence file, so no code was taken.** Only the documented
+  *behaviour* was reimplemented from scratch in fresh Apps Script. Do not copy source from that
+  repository into this one.
+
+No bank is affiliated with or endorses this project. Bank names appear only as the subjects of
+email-format parsing.
