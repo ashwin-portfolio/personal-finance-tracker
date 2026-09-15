@@ -1,0 +1,19 @@
+# Apps Script local tooling
+.clasp.json
+node_modules/
+
+# Never commit the workbook — it holds real transaction history
+*.xlsx
+*.xls
+~$*
+
+# Never commit unredacted mail samples
+samples/
+*.eml
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

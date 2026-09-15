@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      body { font: 13px/1.5 -apple-system, "Segoe UI", Roboto, Arial, sans-serif; margin: 0; padding: 12px; color: #202124; }
+      h3 { margin: 0 0 4px; font-size: 14px; }
+      .summary { background: #f1f3f4; border-radius: 4px; padding: 8px; margin-bottom: 12px; font-size: 12px; word-break: break-word; }
+      label { display: block; margin: 10px 0 4px; font-weight: 600; font-size: 12px; }
+      input, select, textarea { width: 100%; box-sizing: border-box; padding: 6px; border: 1px solid #dadce0; border-radius: 4px; font: inherit; }
+      textarea { resize: vertical; min-height: 44px; }
+      .current { background: #fff8e1; border: 1px solid #ffe082; border-radius: 4px; padding: 6px; font-size: 12px; word-break: break-word; }
+      button { margin-top: 14px; width: 100%; padding: 9px; border: 0; border-radius: 4px; background: #1a73e8; color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+      button:disabled { background: #9aa0a6; cursor: default; }
+      .msg { margin-top: 12px; padding: 8px; border-radius: 4px; font-size: 12px; word-break: break-word; }
+      .ok { background: #e6f4ea; border: 1px solid #a8dab5; }
+      .err { background: #fce8e6; border: 1px solid #f5b5b0; }
+      .hint { color: #5f6368; font-size: 11px; margin-top: 6px; }
+    </style>
+  </head>
+  <body>
+    <h3>Correct a transaction</h3>
+    <div class="summary" id="summary">Loading…</div>
+
+    <label for="txnId">Transaction ID</label>
+    <input id="txnId" type="text" placeholder="Paste an ID, or select a row in Transactions">
+    <div class="hint">Change this and tab out to load a different transaction.</div>
+
+    <label for="field">Field</label>
+    <select id="field"></select>
+
+    <label>Current value</label>
+    <div class="current" id="current">—</div>
+
+    <label for="newValue">New value</label>
+    <input id="newValue" type="text">
+
+    <label for="note">Why (optional, goes into the Audit Log)</label>
+    <textarea id="note" placeholder="e.g. merchant was a marketplace, real category is Groceries"></textarea>
+
+    <button id="save">Save and log the change</button>
+    <div id="msg"></div>
+
+    <script>
+      var ctx = { values: {}, fields: [] };
+
+      function el(id) { return document.getElementById(id); }
+
+      function showMsg(text, isError) {
+        var m = el('msg');
+        m.className = 'msg ' + (isError ? 'err' : 'ok');
+        m.textContent = text;
+      }
+
+      function renderFields() {
+        var sel = el('field');
+        sel.innerHTML = '';
+        ctx.fields.forEach(function (f) {
+          var o = document.createElement('option');
+          o.value = f; o.textContent = f;
+          sel.appendChild(o);
+        });
+        renderCurrent();
+      }
+
+      function renderCurrent() {
+        var f = el('field').value;
+        var v = ctx.values[f];
+        el('current').textContent = (v === '' || v === undefined) ? '(empty)' : v;
+        el('newValue').value = '';
+      }
+
+      function applyCtx(c) {
+        ctx = c;
+        el('summary').textContent = c.message || c.summary || '(no transaction loaded)';
+        el('txnId').value = c.txnId || '';
+        renderFields();
+        el('save').disabled = !c.txnId;
+      }
+
+      function loadById() {
+        var id = el('txnId').value.trim();
+        if (!id) return;
+        el('save').disabled = true;
+        google.script.run
+          .withSuccessHandler(applyCtx)
+          .withFailureHandler(function (e) { showMsg(e.message, true); })
+          .lookupTransaction(id);
+      }
+
+      el('field').addEventListener('change', renderCurrent);
+      el('txnId').addEventListener('change', loadById);
+
+      el('save').addEventListener('click', function () {
+        el('save').disabled = true;
+        google.script.run
+          .withSuccessHandler(function (res) {
+            showMsg(res, false);
+            loadById();
+          })
+          .withFailureHandler(function (e) {
+            showMsg(e.message, true);
+            el('save').disabled = false;
+          })
+          .applyCorrection({
+            txnId: el('txnId').value.trim(),
+            field: el('field').value,
+            newValue: el('newValue').value,
+            note: el('note').value
+          });
+      });
+
+      google.script.run
+        .withSuccessHandler(applyCtx)
+        .withFailureHandler(function (e) { showMsg(e.message, true); })
+        .getCorrectionContext();
+    </script>
+  </body>
+</html>
