@@ -1,6 +1,7 @@
 # Finance Tracker — Gmail → Google Sheets sync
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Google Apps Script](https://img.shields.io/badge/Google%20Apps%20Script-4285F4?logo=google&logoColor=white)](https://developers.google.com/apps-script)
 
 Apps Script implementation of Phases 2–5 of the Automated Personal Finance Tracker PRP.
 It feeds the `Transactions` tab of an existing `finance_tracker.xlsx` / Google Sheet.
