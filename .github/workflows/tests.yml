@@ -1,0 +1,26 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Offline test suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # The runner loads every .gs file into one VM context with Apps Script
+      # stubs, so a syntax error anywhere fails the build before a single
+      # assertion runs. No dependencies to install — it is plain Node.
+      - name: Run tests
+        run: node scripts/run-tests.js apps-script

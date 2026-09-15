@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Google Apps Script](https://img.shields.io/badge/Google%20Apps%20Script-4285F4?logo=google&logoColor=white)](https://developers.google.com/apps-script)
-[![Tests](https://img.shields.io/badge/tests-34%20passing-brightgreen)](scripts/run-tests.js)
+[![Tests](https://github.com/ashwin-portfolio/personal-finance-tracker/actions/workflows/tests.yml/badge.svg)](https://github.com/ashwin-portfolio/personal-finance-tracker/actions/workflows/tests.yml)
 
 Apps Script implementation of Phases 2–5 of the Automated Personal Finance Tracker PRP.
 It feeds the `Transactions` tab of an existing `finance_tracker.xlsx` / Google Sheet.
@@ -71,6 +71,10 @@ apps-script/
 docs/
   DEPLOY.md           Steps 1–3 and 10, in order
   SAMPLE-EMAILS.md    how to redact and hand over samples to unblock Step 4
+scripts/
+  run-tests.js        runs the suite outside Google, no dependencies
+.github/workflows/
+  tests.yml           CI — the same suite on every push and PR
 ```
 
 ## Constraints this honours
@@ -108,6 +112,11 @@ To run the tests outside Google (syntax check + full suite under Node):
 ```bash
 node scripts/run-tests.js apps-script
 ```
+
+The same command runs in CI on every push and pull request to `main`
+(`.github/workflows/tests.yml`). The runner exits non-zero when any assertion fails, and it loads
+every `.gs` file into one VM context first — so a syntax error anywhere fails the build before a
+single assertion runs. There are no dependencies to install.
 
 ## Licence and attribution
 
