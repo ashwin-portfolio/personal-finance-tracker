@@ -43,7 +43,13 @@ function accounts_() {
       id:     id,
       bank:   cBank   >= 0 ? String(rows[i][cBank]).trim()   : '',
       rules:  rules,
-      last4:  cLast4  >= 0 ? String(rows[i][cLast4]).trim()  : '',
+      // Last 4 Digits is also a list: one account is named by its account
+      // number in UPI alerts and by its debit card number in card alerts,
+      // and both must resolve to the same row.
+      last4s: cLast4 >= 0 ? String(rows[i][cLast4]).split(/[,;]/)
+                              .map(function (x) { return x.trim(); })
+                              .filter(function (x) { return x.length > 0; })
+                          : [],
       parser: cParser >= 0 ? String(rows[i][cParser]).trim() : ''
     });
   }
@@ -71,7 +77,10 @@ function matchAccount_(fromHeader, body) {
   if (candidates.length === 1) return { account: candidates[0], ambiguous: false };
 
   var byLast4 = candidates.filter(function (a) {
-    return a.last4 && body.indexOf(a.last4) !== -1;
+    for (var j = 0; j < a.last4s.length; j++) {
+      if (body.indexOf(a.last4s[j]) !== -1) return true;
+    }
+    return false;
   });
   if (byLast4.length === 1) return { account: byLast4[0], ambiguous: false };
   return { account: null, ambiguous: true, candidates: candidates };

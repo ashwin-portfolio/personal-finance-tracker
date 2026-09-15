@@ -14,8 +14,8 @@ rows into a ledger you are going to make spending decisions from.
 
    | Account | Sender Rule | Parser |
    |---|---|---|
-   | HDFC credit card | `alerts@hdfcbank.bank.in` | `HDFC_CC` |
-   | HDFC UPI / savings | `alerts@hdfcbank.bank.in` | `HDFC_UPI` |
+   | HDFC credit card | `alerts@hdfcbank.bank.in` | *(leave blank)* |
+   | HDFC UPI / savings / debit card | `alerts@hdfcbank.bank.in` | *(leave blank)* |
    | SBI credit card | `onlinesbicard@sbicard.com, from@cred.club` | *(leave blank)* |
 
    `Sender Rule` takes a comma-separated list. The SBI row carries CRED's sender too, because a
@@ -36,8 +36,19 @@ rows into a ledger you are going to make spending decisions from.
 5. Leave `Parser` blank on every row. One HDFC sender covers card, UPI and savings alerts, and the
    SBI row now covers both SBI Card and CRED — a fixed parser would mis-route the others. Body
    sniffing picks correctly; set `Parser` only to override a specific misrouting you have observed.
-6. If two accounts share a sender (two HDFC cards, say), fill in `Last 4 Digits` for both.
-   Without it the message is reported ambiguous and sent to review rather than guessed onto a card.
+6. **Fill in `Last 4 Digits` — this is what actually attributes HDFC mail.** One HDFC sender covers
+   credit card, debit card, UPI and savings, so the sender alone cannot say which account a message
+   belongs to. It is a comma-separated list, because one account answers to more than one number:
+
+   | Account ID | Last 4 Digits | Why |
+   |---|---|---|
+   | HDFC-CC | your credit card's last 4 | named in credit-card alerts |
+   | UPI-SAV | your account's last 4, your **debit card's** last 4 | UPI and savings alerts name the account; debit-card alerts name only the card |
+   | SBI-CC | your SBI card's last 4 | named in SBI Card alerts and in CRED confirmations |
+
+   Miss the debit-card number and every debit-card alert is ambiguous between two HDFC rows, so it
+   goes to the Review Queue instead of the ledger. A message that truly cannot be attributed is
+   still reported ambiguous rather than guessed onto whichever row happens to come first.
 
 **Gate:** several real HDFC, UPI and SBI emails visible under the label.
 
@@ -67,7 +78,7 @@ against the real workbook. Test emails must never reach the real `Transactions` 
 5. **Finance Sync → Verify workbook schema.** Fix everything it reports before going further —
    either rename the sheet column or edit the `SCHEMA` block in `00_Config.gs` to match reality.
    Optional columns reported as missing are fine to leave alone.
-6. **Finance Sync → Run tests.** 69 assertions, no writes. All should pass.
+6. **Finance Sync → Run tests.** 100 assertions, no writes. All should pass.
 7. **Finance Sync → Dry run — entire label.** Authorise the scopes when prompted (you will see a
    Gmail read-only consent screen; there is no send or delete permission to grant).
 8. Extensions → Apps Script → **Executions** → open the run → read the log.

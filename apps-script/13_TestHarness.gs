@@ -23,6 +23,9 @@ function runTests() {
   testRealFormats_();
   testRejections_();
   testCredPayment_();
+  testHdfcDebitCard_();
+  testHdfcSavingsCredit_();
+  testAccountMatching_();
   testDateParsing_();
   testIdentity_();
   testSignAndExclusion_();
@@ -195,6 +198,173 @@ function testCredPayment_() {
   check_('CRED mail is NOT caught by any rejection rule',
          rejectionReason_(env.subject + ' ' + body) === null,
          String(rejectionReason_(env.subject + ' ' + body)));
+}
+/**
+ * HDFC debit card, both real shapes. Redacted: card and account digits changed,
+ * location genericised. The public HDFC block-card and helpline numbers are kept
+ * verbatim — they are the trap these tests exist to catch.
+ */
+function testHdfcDebitCard_() {
+  _t.log.push('HDFC debit card');
+
+  function parse(body) {
+    return parseMessage_({ id: 'x', date: new Date(2026, 0, 1),
+      from: 'HDFC Bank InstaAlerts <alerts@hdfcbank.bank.in>',
+      subject: 'View: Account update for your HDFC Bank A/c', body: body }, null);
+  }
+
+  // --- point of sale ---
+  var pos = parse('Dear Card Holder, Thank you for using your HDFC Bank Debit Card ending 9999 '
+    + 'for Rs 1270.00 at Retail CC on 07-05-2025 12:44:06. '
+    + 'After the above transaction, the total available balance on your card is Rs 1049.57.');
+  check_('debit card POS parses', pos.ok, pos.detail || '');
+  if (pos.ok) {
+    check_('POS amount is the purchase, not the balance below it',
+           pos.txn.amount === 1270, String(pos.txn.amount));
+    check_('POS merchant', pos.txn.merchant === 'Retail CC', pos.txn.merchant);
+    check_('POS date 07-05-2025',
+           pos.txn.date.getFullYear() === 2025 && pos.txn.date.getMonth() === 4 && pos.txn.date.getDate() === 7,
+           pos.txn.date.toISOString());
+    check_('POS direction forced to debit', pos.txn.direction === 'debit', pos.txn.direction);
+    check_('POS routed to the debit-card parser, not the credit-card one',
+           pos.txn.parser === 'HDFC_DC', pos.txn.parser);
+  }
+
+  // --- ATM withdrawal, with two decoy phone numbers after "on" ---
+  var atm = parse('Dear Card Holder, Thank you for using your HDFC Bank Debit Card ending 9999 '
+    + 'for ATM withdrawal for Rs 1000.00 in CHENNAI at MAIN ROAD on 08-09-2026 20:41:35. '
+    + 'After the above transaction, the total available balance on your card is Rs 1049.57. '
+    + 'Not you? Please sms BLOCK DEBIT CARD 9999 to 7308080808 to block the card immediately '
+    + 'or call on 18002586161 to report this transaction.');
+  check_('ATM withdrawal parses', atm.ok, atm.detail || '');
+  if (atm.ok) {
+    check_('ATM amount', atm.txn.amount === 1000, String(atm.txn.amount));
+    check_('ATM merchant is the location', atm.txn.merchant === 'MAIN ROAD', atm.txn.merchant);
+    check_('ATM date is the transaction date, not the helpline number after "on"',
+           atm.txn.date.getFullYear() === 2026 && atm.txn.date.getMonth() === 8 && atm.txn.date.getDate() === 8,
+           atm.txn.date.toISOString());
+  }
+
+  // --- merchant written with a trailing comma ---
+  var comma = parse('Thank you for using your HDFC Bank Debit Card ending 9999 for Rs 582.54 '
+    + 'at MC DONALDS, on 12-07-2025 17:12:44.');
+  check_('trailing comma stripped from merchant',
+         comma.ok && comma.txn.merchant === 'MC DONALDS', comma.ok ? comma.txn.merchant : comma.detail);
+
+  // --- a failed attempt must never be booked ---
+  var failed = parseMessage_({ id: 'x', date: new Date(2026, 0, 1),
+    from: 'alerts@hdfcbank.bank.in', subject: 'Payment unsuccessful HDFC Bank Debit Card xx9999',
+    body: 'We would like to update you that the below transaction attempted with your '
+        + 'HDFC Bank Debit Card XX9999 for Rs 2500.00 could not be completed.' }, null);
+  check_('failed debit-card payment dropped', !failed.ok && failed.drop === true,
+         JSON.stringify(failed.detail || failed));
+
+  var disabled = parseMessage_({ id: 'x', date: new Date(2026, 0, 1),
+    from: 'alerts@hdfcbank.bank.in', subject: 'Payment unsuccessful HDFC Bank Debit Card xx9999',
+    body: 'We want to inform you that your transaction on Debit Card ending with xx9999 '
+        + 'has failed since the card is currently disabled for domestic contactless.' }, null);
+  check_('disabled-card failure dropped', !disabled.ok && disabled.drop === true,
+         JSON.stringify(disabled.detail || disabled));
+}
+
+/**
+ * HDFC savings credits. Both real shapes carry a counterparty and a UPI
+ * reference, so these are not anonymous credits.
+ */
+function testHdfcSavingsCredit_() {
+  _t.log.push('HDFC savings credit');
+
+  function parse(body) {
+    return parseMessage_({ id: 'gmail-sav', date: new Date(2026, 0, 1),
+      from: 'HDFC Bank InstaAlerts <alerts@hdfcbank.bank.in>',
+      subject: 'View: Account update for your HDFC Bank A/c', body: body }, null);
+  }
+
+  var a = parse('Dear Customer, Greetings from HDFC Bank! We are writing to inform you that '
+    + 'Rs.1000.00 has been successfully credited to your HDFC Bank account ending in 1111. '
+    + 'Transaction Details: a. Date: 08-09-26 b. Sender: SAMPLE SENDER (VPA: 9999999999@nyes) '
+    + 'c. UPI Reference No.: 004800000001');
+  check_('savings credit with sender parses', a.ok, a.detail || '');
+  if (a.ok) {
+    check_('amount', a.txn.amount === 1000, String(a.txn.amount));
+    check_('counterparty taken from "Sender:"', a.txn.merchant === 'SAMPLE SENDER', a.txn.merchant);
+    check_('sender VPA captured', a.txn.vpa === '9999999999@nyes', a.txn.vpa);
+    check_('UPI Reference No. captured', a.txn.reference === '004800000001', a.txn.reference);
+    check_('reference gives tier-1 identity',
+           makeTransactionId_('UPI-SAV', a.txn, 'gmail-sav').tier === 'reference');
+    check_('direction is credit', a.txn.direction === 'credit', a.txn.direction);
+    check_('routed to the savings parser, not the UPI one',
+           a.txn.parser === 'HDFC_SAV_CREDIT', a.txn.parser);
+  }
+
+  var b = parse('Dear Customer, Rs. 49000.00 is successfully credited to your account **1111 '
+    + 'by VPA samplehandle-4@okaxis SAMPLE SENDER on 27-04-2026.');
+  check_('"by VPA" variant parses', b.ok, b.detail || '');
+  if (b.ok) {
+    check_('variant amount', b.txn.amount === 49000, String(b.txn.amount));
+    check_('variant counterparty', b.txn.merchant === 'SAMPLE SENDER', b.txn.merchant);
+  }
+
+  // A normal UPI debit must still reach the UPI parser, not this one.
+  var debit = parseMessage_({ id: 'x', date: new Date(2026, 0, 1),
+    from: 'alerts@hdfcbank.bank.in', subject: 'You have done a UPI txn. Check details!',
+    body: 'Rs.35.00 is debited from your account ending 1111 towards VPA sample@ybl (SAMPLE SHOP) '
+        + 'on 07-09-26. UPI transaction reference no.: 120000000002' }, null);
+  check_('UPI debit still routes to HDFC_UPI',
+         debit.ok && debit.txn.parser === 'HDFC_UPI', debit.ok ? debit.txn.parser : debit.detail);
+}
+/**
+ * Account attribution. HDFC alerts every product from ONE sender, so the sender
+ * alone never decides which account a message belongs to — the last-4 in the body
+ * does. And one account answers to several last-4s: its account number in UPI
+ * alerts, its debit card number in card alerts.
+ */
+function testAccountMatching_() {
+  _t.log.push('Account attribution (one sender, several products)');
+
+  var saved = _accountsCache;
+  _accountsCache = [
+    { id: 'HDFC-CC',  bank: 'HDFC', rules: ['alerts@hdfcbank.bank.in'], last4s: ['1111'], parser: '' },
+    { id: 'UPI-SAV',  bank: 'HDFC', rules: ['alerts@hdfcbank.bank.in'], last4s: ['2222', '3333'], parser: '' },
+    { id: 'SBI-CC',   bank: 'SBI',  rules: ['onlinesbicard@sbicard.com', 'from@cred.club'], last4s: ['4444'], parser: '' }
+  ];
+
+  try {
+    var cc = matchAccount_('HDFC Bank InstaAlerts <alerts@hdfcbank.bank.in>',
+                           'debited from your HDFC Bank Credit Card ending 1111 towards SHOP');
+    check_('credit card alert lands on the card account',
+           cc.account && cc.account.id === 'HDFC-CC', cc.account ? cc.account.id : 'ambiguous');
+
+    var upi = matchAccount_('HDFC Bank InstaAlerts <alerts@hdfcbank.bank.in>',
+                            'Rs.35.00 is debited from your account ending 2222 towards VPA a@b');
+    check_('UPI alert lands on the savings account',
+           upi.account && upi.account.id === 'UPI-SAV', upi.account ? upi.account.id : 'ambiguous');
+
+    // The case this change exists for: the debit card mail names only the CARD,
+    // never the account number.
+    var dc = matchAccount_('HDFC Bank InstaAlerts <alerts@hdfcbank.bank.in>',
+                           'Thank you for using your HDFC Bank Debit Card ending 3333 for Rs 1270.00');
+    check_('debit card alert resolves via the second last-4 on the same row',
+           dc.account && dc.account.id === 'UPI-SAV', dc.account ? dc.account.id : 'ambiguous');
+
+    // CRED reaches the SBI card through the second sender rule on that row.
+    var cred = matchAccount_('CRED <from@cred.club>', 'SBI 4444 amount paid Rs.4,840.00');
+    check_('CRED confirmation resolves to the card it paid',
+           cred.account && cred.account.id === 'SBI-CC', cred.account ? cred.account.id : 'ambiguous');
+
+    // A shared sender with no recognisable last-4 must be reported ambiguous,
+    // never guessed onto whichever row happens to be first.
+    var amb = matchAccount_('HDFC Bank InstaAlerts <alerts@hdfcbank.bank.in>',
+                            'Some HDFC notice with no card or account number in it');
+    check_('unattributable message is ambiguous, not guessed',
+           amb.account === null && amb.ambiguous === true, JSON.stringify(amb.account));
+
+    var none = matchAccount_('newsletter@example.com', 'anything');
+    check_('unknown sender matches nothing',
+           none.account === null && none.ambiguous === false, JSON.stringify(none));
+  } finally {
+    _accountsCache = saved;
+  }
 }
 /**
  * The rejection rules. These matter most: every message below carries an

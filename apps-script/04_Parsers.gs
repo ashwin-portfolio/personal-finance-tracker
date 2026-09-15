@@ -103,6 +103,93 @@ var PATTERNS = {
   },
 
   /**
+   * HDFC debit card. Two real shapes, one parser — the ATM form is the POS form
+   * with an extra "for ATM withdrawal" and a city:
+   *   "Thank you for using your HDFC Bank Debit Card ending NNNN for Rs 1270.00
+   *    at Retail CC on 07-05-2025 12:44:06."
+   *   "Thank you for using your HDFC Bank Debit Card ending NNNN for ATM
+   *    withdrawal for Rs 1000.00 in CHENNAI at MAIN ROAD on 08-09-2026 20:41:35."
+   *
+   * The mail then states "the total available balance on your card is Rs N",
+   * which the left-side poison guard rejects, and a block-card SMS number and a
+   * helpline number, neither of which can reach the date or merchant patterns
+   * because both require a real date shape after " on ".
+   *
+   * Direction is forced: "thank you for using your card" is always money going
+   * out. A debit-card refund arrives as an account credit instead, which
+   * HDFC_SAV_CREDIT handles.
+   *
+   * An ATM withdrawal takes the location as its merchant (there is no other
+   * name in the mail). Add an `ATM WITHDRAWAL` keyword to the Categories tab to
+   * catch these — it matches on the body text, not the merchant.
+   */
+  HDFC_DC: {
+    parser: 'HDFC_DC',
+    bank: 'HDFC',
+    requires: [/hdfc/i, /debit\s*card/i, /thank\s+you\s+for\s+using/i],
+    forceDirection: 'debit',
+    amount: [
+      /for\s+(?:rs\.?|inr)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)\s+(?:at|in)\b/i
+    ],
+    merchant: [
+      /\bat\s+([^\n]{2,60}?),?\s+on\s+\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}/i
+    ],
+    date: [
+      /\bon\s+(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/i
+    ],
+    reference: [
+      /(?:ref(?:erence)?\s*(?:no\.?|number)?|txn\s*(?:no\.?|id))\s*[:\-#]?\s*([A-Za-z0-9]{6,25})/i
+    ],
+    creditHints: []
+  },
+  /**
+   * HDFC savings-account credit. Two real shapes:
+   *
+   *   "Rs.1000.00 has been successfully credited to your HDFC Bank account
+   *    ending in NNNN. Transaction Details: a. Date: 08-09-26
+   *    b. Sender: SENDER NAME (VPA: handle@psp) c. UPI Reference No.: NNNNNNNNN"
+   *
+   *   "Rs. 49000.00 is successfully credited to your account **NNNN by VPA
+   *    handle@okaxis SENDER NAME on ..."
+   *
+   * The first form carries both a sender name and a UPI reference, so these are
+   * not anonymous credits: they get a real counterparty and tier-1 identity.
+   *
+   * Listed before HDFC_UPI. Both forms contain the word VPA, so HDFC_UPI would
+   * otherwise claim them on its `requires` and then fail to find an amount,
+   * because its patterns expect "is debited" / "has been credited" rather than
+   * "is successfully credited".
+   */
+  HDFC_SAV_CREDIT: {
+    parser: 'HDFC_SAV_CREDIT',
+    bank: 'HDFC',
+    requires: [/hdfc/i, /credited\s+to\s+your\s+(?:HDFC\s+Bank\s+)?account/i],
+    merchantOptional: true,
+    merchantFallback: 'HDFC Account Credit',
+    forceDirection: 'credit',
+    amount: [
+      /(?:rs\.?|inr)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)\s+(?:has\s+been\s+|is\s+)?successfully\s+credited/i,
+      /(?:rs\.?|inr)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)\s+(?:has\s+been\s+|is\s+)credited/i
+    ],
+    merchant: [
+      /Sender\s*[:\-]\s*([^(\n]{2,60}?)\s*\(\s*VPA/i,
+      /by\s+VPA\s+[^\s]{3,60}\s+([A-Z][A-Za-z .]{2,50}?)\s+on\s+/,
+      /Sender\s*[:\-]\s*([^\n]{2,60})/i
+    ],
+    vpa: [
+      /VPA\s*[:\s]\s*([A-Za-z0-9][A-Za-z0-9._\-]{2,50}@[A-Za-z]{2,20})/i
+    ],
+    date: [
+      /Date\s*[:\-]\s*(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/i,
+      /\bon\s+(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/i
+    ],
+    reference: [
+      /UPI\s+Reference\s+No\.?\s*[:\-#]?\s*(\d{9,22})/i,
+      /(?:ref(?:erence)?\s*(?:no\.?|number)?)\s*[:\-#]?\s*([A-Za-z0-9]{6,25})/i
+    ],
+    creditHints: [/credited/i]
+  },
+  /**
    * HDFC UPI. Real shape:
    *   "Rs.130.00 is debited from your account ending 1111 towards VPA
    *    sample.abc123@pty (SAMPLE SNACK BAR) on 15-09-26.
@@ -135,35 +222,6 @@ var PATTERNS = {
       /(?:UPI\s*(?:ref(?:erence)?)?\s*(?:no\.?)?|UTR|RRN)\s*[:\-#]?\s*(\d{9,22})/i
     ],
     creditHints: [/is\s+credited/i, /\brefund/i, /\breceived from\b/i]
-  },
-
-  /**
-   * HDFC savings-account credit. Real shape:
-   *   "Rs.4000.00 has been successfully credited to your HDFC Bank account
-   *    ending in 1111. Transaction Details: a. Date: 14-09-26"
-   * No merchant at all, so merchantOptional lets it through with a placeholder
-   * rather than failing to the review queue on every salary or transfer credit.
-   */
-  HDFC_SAV_CREDIT: {
-    parser: 'HDFC_SAV_CREDIT',
-    bank: 'HDFC',
-    requires: [/hdfc/i, /credited to your HDFC Bank account/i],
-    merchantOptional: true,
-    merchantFallback: 'HDFC Account Credit',
-    amount: [
-      /(?:rs\.?|inr)\s*([0-9][0-9,]*(?:\.[0-9]{1,2})?)\s+has\s+been\s+successfully\s+credited/i
-    ],
-    merchant: [
-      /(?:from|by)\s+([A-Z0-9][^\n]{2,60}?)\s+on\s+\d/
-    ],
-    date: [
-      /Date\s*[:\-]\s*(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/i,
-      /\bon\s+(\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/i
-    ],
-    reference: [
-      /(?:ref(?:erence)?\s*(?:no\.?|number)?)\s*[:\-#]?\s*([A-Za-z0-9]{6,25})/i
-    ],
-    creditHints: [/credited/i]
   },
 
   /**
@@ -202,7 +260,7 @@ var PATTERNS = {
  */
 var REJECT_SIGNATURES = [
   { name: 'OTP',            test: /is\s+the\s+OTP\s+for|OTP\s+for\s+(?:the\s+)?transaction|verification\s+code/i },
-  { name: 'Declined',       test: /has\s+declined\b|transaction\s+(?:is\s+)?declined|declined\s+transaction|failed\s+transaction/i },
+  { name: 'Declined',       test: /has\s+declined\b|transaction\s+(?:is\s+)?declined|declined\s+transaction|failed\s+transaction|payment\s+unsuccessful|could\s+not\s+be\s+completed|has\s+failed\s+since|transaction[^.]{0,40}has\s+failed/i },
   { name: 'EMI promo',      test: /smartemi|eligible\s+for\s+conversion|convert\s+your\s+(?:credit\s+card\s+)?(?:outstanding|balance|bill)|interest\s+rate\s+(?:starts|drop)/i },
   { name: 'Statement',      test: /monthly\s+statement|e-?statement|statement\s+is\s+password/i },
   { name: 'Reward points',  test: /reward\s+points|sbi\s+rewardz/i },
