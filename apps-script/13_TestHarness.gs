@@ -136,8 +136,8 @@ function testClassification_() {
          unk.type === TXN_TYPE.CREDIT && unk.excluded === true && unk.reviewReason === REVIEW_REASON.AMBIGUOUS_TYPE,
          unk.type + '/' + unk.reviewReason);
 
-  var self = classifyTransaction_({ direction: 'debit', raw: 'Rs 500 debited to ashwin@okaxis', merchant: 'ashwin@okaxis' },
-                                  null, ['ASHWIN@OKAXIS']);
+  var self = classifyTransaction_({ direction: 'debit', raw: 'Rs 500 debited to self@okbank', merchant: 'self@okbank' },
+                                  null, ['SELF@OKBANK']);
   check_('known own VPA becomes Self-Transfer and is excluded',
          self.type === TXN_TYPE.SELF_TRANSFER && self.excluded === true, self.type);
 }
