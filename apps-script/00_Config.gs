@@ -87,7 +87,8 @@ var SCHEMA = {
     { name: 'Sent To Review',    required: false },
     { name: 'Parsing Errors',    required: false },
     { name: 'Status',            required: true  },
-    { name: 'Error Message',     required: false }
+    { name: 'Error Message',     required: false },
+    { name: 'Ignored',           required: false }
   ],
   'Accounts': [
     { name: 'Account ID',       required: true  },

@@ -24,3 +24,16 @@ jobs:
       # assertion runs. No dependencies to install — it is plain Node.
       - name: Run tests
         run: node scripts/run-tests.js apps-script
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install openpyxl
+        run: pip install openpyxl
+
+      # Builds the workbook and diffs its header rows against SCHEMA. A header
+      # the builder and 00_Config.gs disagree on would otherwise only surface
+      # as verifySchema() failing mid-deployment.
+      - name: Check the builder's headers match SCHEMA
+        run: python scripts/check_schema.py
