@@ -130,7 +130,7 @@ st = add_sheet('Settings', ['Setting', 'Value', 'Notes'], {1: 32, 2: 22, 3: 74})
 SETTINGS = [
     ['Gmail Label', 'BankAlerts', 'Label the sync scans.'],
     ['Processing Interval', 15, 'Trigger interval in minutes; snapped to 1/5/10/15/30.'],
-    ['Duplicate Review Window (days)', 3, 'Same account + same signed amount inside this window is flagged as a possible duplicate.'],
+    ['Duplicate Review Window (days)', 3, 'Same account + same merchant + same signed amount inside this window is flagged as a possible duplicate.'],
     ['Default Category', 'Uncategorised', 'Used when no Categories keyword matches.'],
     ['Automation Enabled', False, 'KILL SWITCH. Re-read on every trigger fire. FALSE means the trigger exits immediately.'],
     ['Duplicate Handling', 'flag-and-insert', 'flag-and-insert keeps a suspected duplicate and raises a review row; review-only holds it out of the ledger.'],

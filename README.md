@@ -205,7 +205,7 @@ Mapping to the PRP §6 acceptance tests:
 | PRP §6 requirement | Covered by |
 |---|---|
 | Same email twice → zero duplicate rows | `testIdentity_` ("same email twice → identical ID") + the hard-ID check in `processMessage_`. Confirm live by running the sync twice. |
-| Two legitimate same-amount same-day purchases → both retained | `testIdentity_` ("different emails → different IDs"). The soft check flags the coincidence in Review Queue without removing either row. |
+| Two legitimate same-amount same-day purchases → both retained | `testIdentity_` ("different emails → different IDs"). The soft check needs the **merchant** to match as well, so two same-sized payments to different payees are not flagged at all; a genuine coincidence at the same merchant goes to Review Queue without removing either row. |
 | Missing merchant / reference → Review Queue, not guessed | `parseMessage_` returns `{ok:false}` when merchant extraction fails; `testAmountExtraction_` covers the amount side. |
 | Manual correction not overwritten by next sync | Corrected rows are already in the ledger index by Transaction ID, so the source email is a hard duplicate on every later run. Confirm live after Step 7. |
 | One malformed email in ten → other nine still process | Per-message try/catch in `10_Pipeline.gs`. Confirm live by putting a junk email under the label. |

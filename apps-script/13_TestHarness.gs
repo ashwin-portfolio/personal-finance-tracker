@@ -541,20 +541,31 @@ function testSoftDuplicate_() {
   }] };
 
   var inWindow = softDuplicateCheck_(idx,
-    { account: 'HDFC-CC', amount: 250, type: TXN_TYPE.DEBIT, date: new Date(2025, 8, 6) }, 3);
-  check_('same amount next day is flagged', !!inWindow, String(inWindow));
+    { account: 'HDFC-CC', amount: 250, type: TXN_TYPE.DEBIT, merchant: 'CAFE', date: new Date(2025, 8, 6) }, 3);
+  check_('same merchant and amount next day is flagged', !!inWindow, String(inWindow));
 
   var outWindow = softDuplicateCheck_(idx,
-    { account: 'HDFC-CC', amount: 250, type: TXN_TYPE.DEBIT, date: new Date(2025, 8, 20) }, 3);
+    { account: 'HDFC-CC', amount: 250, type: TXN_TYPE.DEBIT, merchant: 'CAFE', date: new Date(2025, 8, 20) }, 3);
   check_('same amount two weeks later is not flagged', outWindow === null, String(outWindow));
 
   var otherAcct = softDuplicateCheck_(idx,
-    { account: 'SBI-CC', amount: 250, type: TXN_TYPE.DEBIT, date: new Date(2025, 8, 6) }, 3);
+    { account: 'SBI-CC', amount: 250, type: TXN_TYPE.DEBIT, merchant: 'CAFE', date: new Date(2025, 8, 6) }, 3);
   check_('same amount on another account is not flagged', otherAcct === null, String(otherAcct));
 
   var otherSign = softDuplicateCheck_(idx,
-    { account: 'HDFC-CC', amount: 250, type: TXN_TYPE.REFUND, date: new Date(2025, 8, 6) }, 3);
+    { account: 'HDFC-CC', amount: 250, type: TXN_TYPE.REFUND, merchant: 'CAFE', date: new Date(2025, 8, 6) }, 3);
   check_('a refund of the same size is not a duplicate of the purchase', otherSign === null, String(otherSign));
+
+  // The real false positives: two small UPI payments of the same size, a day
+  // apart, to completely different payees. Before the merchant check, 16 of 72
+  // imports in a dry run over real mail were flagged this way.
+  var otherMerchant = softDuplicateCheck_(idx,
+    { account: 'HDFC-CC', amount: 250, type: TXN_TYPE.DEBIT, merchant: 'TEA STALL', date: new Date(2025, 8, 6) }, 3);
+  check_('same amount at a different merchant is not flagged', otherMerchant === null, String(otherMerchant));
+
+  var sloppy = softDuplicateCheck_(idx,
+    { account: 'HDFC-CC', amount: 250, type: TXN_TYPE.DEBIT, merchant: '  cafe  ', date: new Date(2025, 8, 6) }, 3);
+  check_('merchant match ignores case and surrounding spaces', !!sloppy, String(sloppy));
 }
 
 function testCategoryPrecedence_() {

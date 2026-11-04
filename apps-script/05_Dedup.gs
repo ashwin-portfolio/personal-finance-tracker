@@ -125,9 +125,22 @@ function signedAmount_(amount, type) {
   return a;
 }
 
+/** Merchant comparison for the soft check: case and spacing do not count. */
+function sameMerchant_(a, b) {
+  return String(a == null ? '' : a).trim().toLowerCase().replace(/\s+/g, ' ')
+      === String(b == null ? '' : b).trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
 /**
- * Soft check per Addendum §4.1: same account, same signed amount, within the
- * configured window. Returns the matching prior row or null.
+ * Soft check per Addendum §4.1: same account, same merchant, same signed
+ * amount, within the configured window. Returns the matching prior row or null.
+ *
+ * The merchant has to match. Without it the check fired on amount alone, and a
+ * first dry run over real mail flagged 16 of 72 imports — ₹25 at FAVOURITE CAFE
+ * against ₹25 at Hi Lite, ₹80 at ASHKAR KUNINGARATH against ₹80 at BEERAN.
+ * Everyday UPI payments are small round numbers to many different payees, so
+ * same-amount collisions are constant and say nothing. A genuine duplicate is
+ * the same alert arriving twice, and that carries the same merchant.
  *
  * Never merges and never discards — the caller decides how to surface it.
  */
@@ -139,6 +152,7 @@ function softDuplicateCheck_(idx, candidate, windowDays) {
   for (var i = 0; i < idx.recent.length; i++) {
     var r = idx.recent[i];
     if (r.account !== candidate.account) continue;
+    if (!sameMerchant_(r.merchant, candidate.merchant)) continue;
     if (Math.abs(r.signed - target) > 0.005) continue;
     if (Math.abs(r.dateMs - when) > windowMs) continue;
     return r;
