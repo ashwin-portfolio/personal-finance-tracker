@@ -21,6 +21,7 @@ function runTests() {
 
   testAmountExtraction_();
   testRealFormats_();
+  testEmphasisStripping_();
   testRejections_();
   testCredPayment_();
   testHdfcDebitCard_();
@@ -371,6 +372,46 @@ function testAccountMatching_() {
  * amount and most carry something that looks like a merchant, so without
  * rejection they become phantom ledger rows.
  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Gmail's derived plain text for an HTML-only alert marks bold with asterisks.
+ * These lock down both halves: the markers go, merchant asterisks stay.
+ */
+function testEmphasisStripping_() {
+  _t.log.push('Emphasis markers in Gmail-derived plain text');
+
+  check_('opening and closing markers are removed',
+         stripEmphasis_('that *Rs. 519.00* has been debited') === 'that Rs. 519.00 has been debited',
+         stripEmphasis_('that *Rs. 519.00* has been debited'));
+  check_('a marker before a full stop is removed',
+         stripEmphasis_('at *18:36:03*.') === 'at 18:36:03.',
+         stripEmphasis_('at *18:36:03*.'));
+  check_('an asterisk inside a merchant name is kept',
+         stripEmphasis_('towards PAYU*ZOMATO on') === 'towards PAYU*ZOMATO on',
+         stripEmphasis_('towards PAYU*ZOMATO on'));
+
+  // The real shape getPlainBody() returns, line breaks and all. This exact body
+  // is why every HDFC credit-card alert reported "found no plausible amount".
+  var body = stripEmphasis_(
+    'Dear Customer,\n\nGreetings from HDFC Bank.\n\nWe would like to inform you that '
+    + '*Rs. 519.00* has been debited from your \n*HDFC Bank Credit Card ending *9999* towards '
+    + '*SAMPLE SUPERMARKET* on *15 \nSep, 2026 at 18:36:03*.\n'
+    + 'To check your available balance, outstanding amount, or view recent transactions');
+  var res = parseMessage_({ id: 'x', date: new Date(2026, 8, 15),
+                            from: 'HDFC Bank InstaAlerts <alerts@hdfcbank.bank.in>',
+                            subject: 'A payment was made using your Credit Card',
+                            body: body }, null);
+  check_('bolded HDFC CC alert parses', res.ok, res.detail || '');
+  if (res.ok) {
+    check_('bolded HDFC CC amount', res.txn.amount === 519, String(res.txn.amount));
+    check_('bolded HDFC CC merchant', res.txn.merchant === 'SAMPLE SUPERMARKET', res.txn.merchant);
+    check_('bolded HDFC CC date "15 Sep, 2026"',
+           res.txn.date.getMonth() === 8 && res.txn.date.getDate() === 15,
+           res.txn.date.toISOString());
+  }
+}
+
 function testRejections_() {
   _t.log.push('Non-transaction mail must be dropped, not booked');
 

@@ -15,7 +15,7 @@ It does not touch the Dashboard, Budget, or Safe-to-Spend layer — those are al
 | 1 | Gmail label + filters | **You do this in the browser.** See [docs/DEPLOY.md](docs/DEPLOY.md). |
 | 2 | Duplicate the workbook for dev | **You do this.** Non-negotiable — nothing here should first run against the real ledger. |
 | 3 | Apps Script project, dry-run only | Built — `runDryRun()` / `runFullDryRun()`. Writes to no tab at all. |
-| 4 | Parsers, HDFC → UPI → SBI | Validated against real alert mail (Sep 2026) and covered by fixtures. Not yet confirmed by a live dry run. |
+| 4 | Parsers, HDFC → UPI → SBI | Dry run over 100 real emails (Nov 2026): UPI, SBI Card and CRED parse correctly; every HDFC credit-card alert failed on the asterisk bug below, now fixed. Confirming re-run still pending. |
 | 5 | Transaction ID + deduplication | Built and unit-tested — `05_Dedup.gs`. |
 | 6 | Categorisation | Built and unit-tested — `06_Categorize.gs`. |
 | 7 | Manual "Run Sync Now" | Built — Finance Sync menu, with a confirm dialog. |
@@ -55,6 +55,28 @@ CRED needs three things the bank parsers do not:
 
 A CRED confirmation is classified `CC Payment` and excluded from spending on the card side, per
 Orig §10 — paying a bill is not income and not negative spending.
+
+### HDFC alerts are HTML-only, so Gmail bolds them with asterisks
+
+HDFC sends `multipart/alternative` with **only a `text/html` part**. There is no `text/plain`, so
+`getPlainBody()` derives one, and every `<b>` comes back wrapped in asterisks. What the parser
+actually receives is:
+
+```
+*Rs. 519.00* has been debited from your
+*HDFC Bank Credit Card ending *9633* towards *AVENUE SUPERMARTS LIMI* on *15
+Sep, 2026 at 18:36:03*.
+```
+
+The asterisk lands exactly where the amount pattern expects whitespace, so every HDFC credit-card
+alert failed with "found no plausible amount" — the merchant and date patterns broke the same way.
+It is invisible in Gmail's web view, which strips the markers before you read the mail, and it was
+caught only by a dry run against real mail.
+
+`stripEmphasis_` in `03_GmailIngest.gs` removes them during body normalisation, so every parser
+benefits rather than each pattern growing an optional `\*`. Only delimiting asterisks go — one
+opening a run or closing one. An asterisk inside a word is kept on purpose, because card networks
+put them in merchant names and `PAYU*ZOMATO` must not become `PAYUZOMATO`.
 
 ### Rejection is load-bearing, not an optimisation
 
@@ -145,7 +167,7 @@ apps-script/
   10_Pipeline.gs      orchestration + entry points + failure isolation
   11_Triggers.gs      trigger install/remove, duplicate-safe
   12_AuditLog.gs      deliberate correction workflow
-  13_TestHarness.gs   100 offline tests incl. real-format fixtures + previewParse()
+  13_TestHarness.gs   107 offline tests incl. real-format fixtures + previewParse()
   99_Menu.gs          the Finance Sync menu
   Sidebar.html        correction UI
 docs/
@@ -174,9 +196,9 @@ scripts/
 
 ## Testing
 
-`runTests()` (Finance Sync → Run tests) runs 100 offline assertions against the pure logic,
+`runTests()` (Finance Sync → Run tests) runs 107 offline assertions against the pure logic,
 including end-to-end parses of every real alert format and every rejection case. It touches no tab
-and needs no Gmail access, so it is safe in the real workbook. All 100 pass as shipped.
+and needs no Gmail access, so it is safe in the real workbook. All 107 pass as shipped.
 
 Mapping to the PRP §6 acceptance tests:
 

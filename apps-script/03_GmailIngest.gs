@@ -100,15 +100,37 @@ function normaliseBody_(message) {
       .replace(/<\/(p|div|tr|td|table|h[1-6])>/gi, '\n')
       .replace(/<[^>]+>/g, ' ');
   }
-  return text
+  text = text
     .replace(/&nbsp;/gi, ' ')
     .replace(/&amp;/gi, '&')
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>')
-    .replace(/\u20b9/g, 'Rs.')
+    .replace(/\u20b9/g, 'Rs.');
+
+  return stripEmphasis_(text)
     .replace(/[ \t\u00a0]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+/**
+ * Removes the asterisks Gmail puts around bold text.
+ *
+ * HDFC's alerts are HTML-only -- there is no text/plain part -- so getPlainBody()
+ * derives one, and every <b> comes back as *...*. The real alert therefore reads
+ * "*Rs. 519.00* has been debited", putting an asterisk exactly where the amount
+ * pattern expects whitespace. The merchant and date patterns break the same way.
+ * Every HDFC credit-card alert failed to parse because of this.
+ *
+ * Only delimiting asterisks go: one opening a run (whitespace before, non-space
+ * after) or closing one (non-space before, whitespace or punctuation after). An
+ * asterisk inside a word stays, because card networks put them in merchant
+ * names -- PAYU*ZOMATO must not become PAYUZOMATO.
+ */
+function stripEmphasis_(text) {
+  return String(text)
+    .replace(/(^|[\s(\[])\*+(?=\S)/g, '$1')
+    .replace(/(\S)\*+(?=[\s).,;:!?\]]|$)/g, '$1');
 }
 
 /** Builds the Gmail search query for this run. */
