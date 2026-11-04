@@ -443,6 +443,24 @@ function testRejections_() {
     'Attached herewith is the monthly statement of your SBI Credit Card ending with XXXX XX99.');
   check_('statement mail dropped', !stmt.ok && stmt.drop === true, JSON.stringify(stmt.detail || stmt));
 
+  // A card-settings change. Found in the Review Queue after the first real
+  // sync: it carries a card number and no amount, so no parser claimed it and
+  // it was queued for a human instead of being dropped.
+  var cardCtl = parse('View: Account update for your HDFC Bank A/c',
+    'Thank you for Banking with us. This is to inform you have modified Card usage settings for '
+    + 'Credit Card ending with XX9999 on 22-06-2026 via Online Banking.');
+  check_('card usage settings change dropped', !cardCtl.ok && cardCtl.drop === true,
+         JSON.stringify(cardCtl.detail || cardCtl));
+
+  // CRED markets its investment product from the same address it sends bill
+  // payment confirmations from, so only the body can tell them apart.
+  var kuvera = parseMessage_({ id: 'x', date: new Date(2026, 7, 4), from: 'Kuvera by CRED <from@cred.club>',
+    subject: 'your money is worth less than you think',
+    body: 'savings accounts keep your money safe, but they also lose value over time. '
+        + 'The Kuvera by CRED platform is published by Dreamplug Technologies Private Limited.' }, null);
+  check_('Kuvera investment promo dropped', !kuvera.ok && kuvera.drop === true,
+         JSON.stringify(kuvera.detail || kuvera));
+
   // And a genuine alert must NOT be caught by any rejection rule.
   var real = parse('A payment was made using your Credit Card',
     'We would like to inform you that Rs. 450.00 has been debited from your HDFC Bank Credit Card '

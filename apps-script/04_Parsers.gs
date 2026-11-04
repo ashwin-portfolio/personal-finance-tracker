@@ -264,8 +264,14 @@ var REJECT_SIGNATURES = [
   { name: 'EMI promo',      test: /smartemi|eligible\s+for\s+conversion|convert\s+your\s+(?:credit\s+card\s+)?(?:outstanding|balance|bill)|interest\s+rate\s+(?:starts|drop)/i },
   { name: 'Statement',      test: /monthly\s+statement|e-?statement|statement\s+is\s+password/i },
   { name: 'Reward points',  test: /reward\s+points|sbi\s+rewardz/i },
-  { name: 'Card control',   test: /login\s+PIN|tap\s*&\s*pay|transaction\s+limits|usage\s+limit\s+is\s+set/i },
-  { name: 'Marketing',      test: /know\s+more\s*\||instant\s+discount|voucher|joining\s+fee|pre-?approved/i }
+  { name: 'Card control',   test: /login\s+PIN|tap\s*&\s*pay|transaction\s+limits|usage\s+limit\s+is\s+set|card\s+usage\s+settings/i },
+  { name: 'Marketing',      test: /know\s+more\s*\||instant\s+discount|voucher|joining\s+fee|pre-?approved/i },
+  // CRED sends investment marketing from the same address as its bill-payment
+  // confirmations, so the sender cannot separate them. "Kuvera" is the name of
+  // the investment arm and never appears in a payment receipt. Matching the
+  // parent company instead would be wrong: Dreamplug Technologies is CRED
+  // itself, and that string is in the footer of the real confirmations too.
+  { name: 'Kuvera promo',   test: /\bkuvera\b/i }
 ];
 
 /**

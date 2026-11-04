@@ -96,6 +96,14 @@ and marketing mail before parser selection. Dropped mail is logged and discarded
 The EMI promos also forced a change to the amount guard: HDFC writes both `Outstanding of Rs. 30682`
 and `Rs.30682 Outstanding Amount`, so poison words are now checked on **both** sides of a candidate.
 
+The first sync over real history added two more signatures. HDFC's `Account update` mail —
+*"you have modified Card usage settings for Credit Card ending XX9999"* — carries a card number and
+no amount, so nothing claimed it and it sat in the Review Queue. And CRED markets **Kuvera**, its
+investment product, from the same address its payment confirmations come from, so only the body can
+separate them. The rule matches `kuvera` and nothing else on purpose: the obvious alternative,
+the parent company **Dreamplug Technologies**, appears in the footer of the genuine confirmations
+too, and matching it would silently discard real bill payments.
+
 ### Accounts may list several senders
 
 One card is alerted by its own bank **and** by whatever app you pay the bill through. `Sender Rule`
