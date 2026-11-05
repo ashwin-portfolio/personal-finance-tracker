@@ -121,6 +121,20 @@ function runPipeline_(opts) {
 /** Processes exactly one message. Mutates toInsert / toReview / stats. */
 function processMessage_(env, idx, c, selfVpas, flagUncategorised, toInsert, toReview, stats) {
 
+  // ---- 0. Is this a transaction alert at all? ------------------------------
+  // Before attribution, because attribution can fail on mail that was never a
+  // transaction. HDFC's MobileBanking "Login PIN" notices name no card at all,
+  // so the sender matches every HDFC account and none of them wins — and the
+  // message was queued as Unsupported without the rejection rules ever running,
+  // even though "login PIN" is one of them. Which account a promo belongs to
+  // is not a question worth asking.
+  var rejectedEarly = rejectionReason_(env.subject + '\n' + env.body);
+  if (rejectedEarly) {
+    stats.ignored++;
+    Logger.log('  - ignored: Not a transaction alert (' + rejectedEarly + '). [' + env.subject + ']');
+    return;
+  }
+
   // ---- 1. Which account is this? -------------------------------------------
   var match = matchAccount_(env.from, env.body);
   if (match.ambiguous) {

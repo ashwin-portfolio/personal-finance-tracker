@@ -461,6 +461,21 @@ function testRejections_() {
   check_('Kuvera investment promo dropped', !kuvera.ok && kuvera.drop === true,
          JSON.stringify(kuvera.detail || kuvera));
 
+  // Ordering matters as much as the rules. These notices name no card, so the
+  // HDFC sender matches both HDFC accounts and attribution fails -- which used
+  // to short-circuit and queue them before any rejection rule ran. Nothing here
+  // touches a sheet, because the message is dropped before attribution.
+  var stats = { ignored: 0, errors: 0 };
+  var review = [];
+  processMessage_({ id: 'x', date: new Date(2026, 8, 9), from: 'alerts@hdfcbank.bank.in',
+                    subject: 'Failed to Set-up 4 Digit Login PIN on your MobileBanking App',
+                    body: 'We want to notify you that your attempt to set your 4 digit Login PIN '
+                        + 'using HDFC Bank MobileBanking App has failed on 09-09-2026 12:07:20.' },
+                  null, null, [], false, [], review, stats);
+  check_('unattributable non-transaction is dropped, not queued',
+         stats.ignored === 1 && stats.errors === 0 && review.length === 0,
+         JSON.stringify(stats) + ' review=' + review.length);
+
   // And a genuine alert must NOT be caught by any rejection rule.
   var real = parse('A payment was made using your Credit Card',
     'We would like to inform you that Rs. 450.00 has been debited from your HDFC Bank Credit Card '
