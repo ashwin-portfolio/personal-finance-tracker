@@ -118,9 +118,11 @@ Only after all of the above, and after repeating the deployment against the real
 2. **Finance Sync → Automation → Install 15-min trigger.** It refuses to create a second trigger if
    one already exists, and repairs the situation if it finds several.
 3. **Finance Sync → Automation → Status** — confirm exactly one trigger.
-4. Watch `Sync Logs` for a couple of fires. With the switch off, the trigger fires and exits without
-   doing anything, which is what you want to see first.
-5. Set `Automation Enabled` to `TRUE`.
+4. Watch **Extensions → Apps Script → Executions** for a couple of fires — not `Sync Logs`. With the
+   switch off, `runScheduledSync` logs one line and returns before the pipeline starts, so it writes
+   no row anywhere. You are looking for `runScheduledSync` appearing every 15 minutes, completing in
+   under a second, saying it exited without doing anything. That is what you want to see first.
+5. Set `Automation Enabled` to `TRUE`. `Sync Logs` starts getting a row per run from the next fire.
 
 **The kill switch is the Settings cell, not the trigger.** Setting it to `FALSE` stops all importing
 on the next fire, from the Sheet, with no script editor access needed.
