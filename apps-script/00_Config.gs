@@ -133,11 +133,14 @@ var SETTING_DEFAULTS = {
 
 /** Review Queue reason vocabulary — must match the tab's data validation list. */
 var REVIEW_REASON = {
-  UNPARSED:          'Unparsed',
-  POSSIBLE_DUP:      'Possible Duplicate',
-  AMBIGUOUS_CAT:     'Ambiguous Category',
-  UNSUPPORTED:       'Unsupported Bank/Format',
-  AMBIGUOUS_TYPE:    'Ambiguous Transaction Type'
+  // Plain English, because this column is read in the Sheet by whoever is
+  // working the queue, not by whoever wrote the parser. The constant names
+  // stay technical; only the stored text changed.
+  UNPARSED:          'Could not read the details',
+  POSSIBLE_DUP:      'Possible duplicate',
+  AMBIGUOUS_CAT:     'No category matched',
+  UNSUPPORTED:       'Email not recognised',
+  AMBIGUOUS_TYPE:    'Money in - please label'
 };
 
 /** Transaction Type vocabulary — must match the Transactions tab validation list. */

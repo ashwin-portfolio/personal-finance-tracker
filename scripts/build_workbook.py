@@ -190,7 +190,9 @@ rq = add_sheet('Review Queue',
                 10: 12, 11: 18})
 dv_reason = DataValidation(
     type='list',
-    formula1='"Unparsed,Possible Duplicate,Ambiguous Category,Unsupported Bank/Format,Ambiguous Transaction Type"',
+    # Must match REVIEW_REASON in apps-script/00_Config.gs exactly.
+    formula1='"Could not read the details,Possible duplicate,No category matched,'
+             'Email not recognised,Money in - please label"',
     allow_blank=True)
 rq.add_data_validation(dv_reason)
 dv_reason.add('F2:F2000')

@@ -105,7 +105,7 @@ Once dry run looks right for a bank:
 - Check `Transactions`, `Review Queue` and `Sync Logs`.
 - **Run it again immediately.** The second run must add **zero** transaction rows and **zero**
   review rows. That is the Step 5 gate, and it is the single most important thing to verify.
-- Put a junk email under the label and run again — it should produce one `Unparsed` review row and
+- Put a junk email under the label and run again — it should produce one `Email not recognised` review row and
   not disturb anything else.
 
 ---

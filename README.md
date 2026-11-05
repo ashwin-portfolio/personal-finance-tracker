@@ -199,7 +199,7 @@ scripts/
 - `message.isUnread()` is never used as a processing condition. Incremental scanning uses Gmail's
   `after:` operator against the last completed run, rewound by `Lookback Overlap (days)`, with the
   resulting re-reads discarded by stable ID.
-- Nothing uncertain is silently inserted. Unparsed, unsupported, ambiguous-type and possible-duplicate
+- Nothing uncertain is silently inserted. Unreadable, unrecognised, unlabelled-credit and possible-duplicate
   cases all produce a Review Queue row.
 
 ## Testing
