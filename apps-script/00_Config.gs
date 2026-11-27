@@ -128,7 +128,8 @@ var SETTING_DEFAULTS = {
   'Base Currency':                  'INR',
   'Refund Match Window (days)':     45,
   'Self Transfer VPAs':             '',
-  'Flag Uncategorised For Review':  false
+  'Flag Uncategorised For Review':  false,
+  'Widget Token':                   ''
 };
 
 /** Review Queue reason vocabulary — must match the tab's data validation list. */

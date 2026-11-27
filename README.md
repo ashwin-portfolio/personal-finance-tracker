@@ -251,6 +251,26 @@ not compared, since nothing addresses a column by index. This also runs in CI.
 It found one real mismatch on its first run: `09_SyncLog.gs` writes an `Ignored` count and the
 builder creates the column, but `SCHEMA` never listed it. `SCHEMA` now does.
 
+## iPhone widget
+
+`apps-script/14_WebApp.gs` publishes the same Apps Script project as a web app returning JSON;
+`ios/finance-widget.js` is a [Scriptable](https://scriptable.app) widget that reads it. There is
+nothing extra to host and no server to pay for.
+
+- **Small widget** — safe-to-spend per day, with spent/budget underneath.
+- **Medium widget** — spend against budget plus the top four categories, overspent ones in red.
+
+Setup steps are in the header of `ios/finance-widget.js`. Two things worth knowing:
+
+- The web app URL is a bearer credential by itself, and URLs leak through browser history and
+  iCloud-synced scripts. So the endpoint also requires `?token=` matching the **Widget Token**
+  setting. Set it to any long random string; blank means the endpoint refuses every request.
+- Figures are read from `Transactions` and `Budget` **by header name**, never from the Dashboard's
+  cells, so replacing the Dashboard tab cannot break the widget.
+
+iOS decides when to refresh a widget; expect minutes, not seconds. The widget shows the last
+successful sync time so a stale number is visible as stale rather than trusted.
+
 ## Licence and attribution
 
 This project is MIT licensed — see [LICENSE](LICENSE).

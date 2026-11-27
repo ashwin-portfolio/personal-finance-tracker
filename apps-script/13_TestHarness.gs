@@ -27,6 +27,7 @@ function runTests() {
   testHdfcDebitCard_();
   testHdfcSavingsCredit_();
   testAccountMatching_();
+  testWidgetPayload_();
   testDateParsing_();
   testIdentity_();
   testSignAndExclusion_();
@@ -365,6 +366,84 @@ function testAccountMatching_() {
            none.account === null && none.ambiguous === false, JSON.stringify(none));
   } finally {
     _accountsCache = saved;
+  }
+}
+/**
+ * Widget payload. The month key is what silently breaks — Budget's Month is
+ * text ("2026-09") but a user can easily retype it as a date — and the spend
+ * sum is what ends up on the phone, so both get checked.
+ */
+function testWidgetPayload_() {
+  _t.log.push('Widget payload');
+
+  var tz = 'Asia/Kolkata';
+  check_('month key from text', monthKey_('2026-09', tz) === '2026-09', monthKey_('2026-09', tz));
+  check_('month key from a full date string',
+         monthKey_('2026-09-01', tz) === '2026-09', monthKey_('2026-09-01', tz));
+  check_('month key from a real Date',
+         monthKey_(new Date(2026, 8, 5), tz) === '2026-09', monthKey_(new Date(2026, 8, 5), tz));
+  check_('month key from blank is blank', monthKey_('', tz) === '', monthKey_('', tz));
+  check_('month key from null does not throw', monthKey_(null, tz) === '', monthKey_(null, tz));
+
+  // Stub the sheet layer. Saved and restored, like the cache stubs above.
+  var now = new Date();
+  var thisMonth = Utilities.formatDate(now, tz, 'yyyy-MM');
+  var inMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  var lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 15);
+
+  // Transactions: Date, Amount, Category, Excluded From Spending
+  var TX = [
+    [inMonth, 500, 'Food', false],
+    [inMonth, 300, 'Food', false],
+    [inMonth, 200, 'Fuel', false],
+    [inMonth, -100, 'Food', false],      // a refund reduces spend
+    [inMonth, 9999, 'Transfer', true],   // excluded: must not count
+    [lastMonth, 7777, 'Food', false],    // other month: must not count
+    ['', 1234, 'Food', false]            // no date: must not count
+  ];
+  var BG = [[thisMonth, 'Food', 2000], [thisMonth, 'Fuel', 1000],
+            ['2000-01', 'Food', 99999]];   // other month: must not count
+
+  var saved = { readRows: readRows_, col: col_, colOrThrow: colOrThrow_,
+                cfg: cfg_, ss: ss_, reset: resetCaches_,
+                open: countOpenReviews_, sync: lastSuccessfulSync_ };
+  var TXCOL = { 'Date': 0, 'Amount': 1, 'Category': 2, 'Excluded From Spending': 3 };
+  var BGCOL = { 'Month': 0, 'Category': 1, 'Budgeted Amount': 2 };
+  try {
+    resetCaches_ = function () {};
+    ss_ = function () { return { getSpreadsheetTimeZone: function () { return tz; } }; };
+    cfg_ = function () { return { defaultCategory: 'Uncategorised', currency: 'INR' }; };
+    countOpenReviews_ = function () { return 2; };
+    lastSuccessfulSync_ = function () { return '2026-11-27 09:00'; };
+    readRows_ = function (tab) { return tab === TAB.TRANSACTIONS ? TX : BG; };
+    col_ = function (tab, name) {
+      var m = tab === TAB.TRANSACTIONS ? TXCOL : BGCOL;
+      return m[name] === undefined ? -1 : m[name];
+    };
+    colOrThrow_ = col_;
+
+    var p = widgetPayload_();
+    check_('spend excludes other months, undated and excluded rows, and nets refunds',
+           p.spent === 900, String(p.spent));
+    check_('budget is this month only', p.budget === 3000, String(p.budget));
+    check_('remaining', p.remaining === 2100, String(p.remaining));
+    check_('safe per day is remaining over days left',
+           Math.abs(p.safePerDay - 2100 / p.daysLeft) < 0.01,
+           p.safePerDay + ' vs ' + (2100 / p.daysLeft));
+    check_('days left is at least 1', p.daysLeft >= 1, String(p.daysLeft));
+    check_('categories sorted by spend, refund netted',
+           p.categories[0].name === 'Food' && p.categories[0].spent === 700,
+           JSON.stringify(p.categories[0]));
+    check_('an excluded-only category does not appear',
+           !p.categories.some(function (c) { return c.name === 'Transfer'; }),
+           JSON.stringify(p.categories));
+    check_('a budgeted category with no spend still appears',
+           p.categories.some(function (c) { return c.name === 'Fuel' && c.budget === 1000; }),
+           JSON.stringify(p.categories));
+  } finally {
+    readRows_ = saved.readRows; col_ = saved.col; colOrThrow_ = saved.colOrThrow;
+    cfg_ = saved.cfg; ss_ = saved.ss; resetCaches_ = saved.reset;
+    countOpenReviews_ = saved.open; lastSuccessfulSync_ = saved.sync;
   }
 }
 /**

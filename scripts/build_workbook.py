@@ -140,6 +140,7 @@ SETTINGS = [
     ['Refund Match Window (days)', 45, 'How far back to look for the purchase a refund reverses.'],
     ['Self Transfer VPAs', '', 'Comma-separated list of your own UPI handles. Matches are excluded from spending.'],
     ['Flag Uncategorised For Review', False, 'TRUE raises a review row whenever no keyword matched.'],
+    ['Widget Token', '', 'Any long random string. The iPhone widget must send it as ?token=; without it the web app returns unauthorised.'],
 ]
 for r, row in enumerate(SETTINGS, start=2):
     for i, v in enumerate(row, start=1):

@@ -9,7 +9,7 @@ const files = [
   '00_Config.gs', '01_Schema.gs', '02_Settings.gs', '03_GmailIngest.gs',
   '04_Parsers.gs', '05_Dedup.gs', '06_Categorize.gs', '07_Classify.gs',
   '08_Ledger.gs', '09_SyncLog.gs', '10_Pipeline.gs', '11_Triggers.gs',
-  '12_AuditLog.gs', '13_TestHarness.gs', '99_Menu.gs'
+  '12_AuditLog.gs', '13_TestHarness.gs', '14_WebApp.gs', '99_Menu.gs'
 ];
 
 const out = [];
@@ -27,6 +27,10 @@ const sandbox = {
         .replace('HHmmss', p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()))
         .replace('HH:mm:ss', p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()));
     }
+  },
+  ContentService: {
+    MimeType: { JSON: 'application/json' },
+    createTextOutput: (t) => ({ setMimeType: () => t })
   },
   SpreadsheetApp: {
     getActiveSpreadsheet: () => ({ getSpreadsheetTimeZone: () => 'Asia/Kolkata' }),
